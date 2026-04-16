@@ -1,0 +1,51 @@
+# HistoRAG Phase-0 MVP canonical config
+# Single source of truth — do not edit after first run.
+# To change any setting, create a new config file and log a new experiment.
+
+run:
+  name: phase0_mvp
+  seed: 42                      # overridden by --seed CLI flag
+  out_dir: experiments/
+  device: auto                  # "auto" | "cuda" | "cpu"
+
+data:
+  dataset: hancock5
+  raw_dir: data/raw
+  slide_ids:                    # fill in after downloading slides (Step 2)
+    - TBD_slide_01
+    - TBD_slide_02
+  label_source: slide_level     # "slide_level" | "patch_level" — confirm at Step 2
+  label_map: null               # path to JSON {slide_id: label} — fill at Step 2
+
+tiling:
+  magnification: 20
+  patch_size: 256
+  stride: 256
+  tissue_filter:
+    method: otsu_hsv
+    thumb_downsample: 32
+    min_tissue_frac: 0.3
+  max_patches_per_slide: 5000
+  patches_dir: data/patches
+
+encoder:
+  name: clip-vitb16
+  model_id: ViT-B-16
+  pretrained: openai
+  batch_size: 32
+  preprocess:
+    resize: 224
+    normalize: clip_openai
+
+index:
+  name: faiss-flatip
+  normalize: true
+  save_path: data/indexes/phase0_mvp.faiss
+
+eval:
+  query_gallery_split:
+    method: stratified_within_slide
+    query_frac: 0.2
+  k_values: [1, 5, 10]
+  compute_map_at: 10
+  random_baseline: true
