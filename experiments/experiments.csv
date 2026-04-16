@@ -1,0 +1,1 @@
+uid,date_utc,git_commit,config_hash,config_path,encoder,index,dataset,num_patches,num_query,num_gallery,seed,top1,top5,top10,map_at_10,random_baseline_top5,embed_time_s,index_time_s,query_time_s,notes
