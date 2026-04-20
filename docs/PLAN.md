@@ -60,13 +60,18 @@
 
 ## Repo structure (target end of Phase 0)
 
+> **Updated:** Simplified from pip-installable `src/` layout to a flat local project.
+> `requirements.txt` replaces `pyproject.toml`. Single `pipeline.py` entrypoint replaces `scripts/`.
+> Tests are gitignored (local only).
+
 ```
 HistoRag-BIMAP/
-├── pyproject.toml                 # deps + package metadata (pip-installable)
+├── requirements.txt               # deps (pip install -r requirements.txt)
+├── pipeline.py                    # single CLI entrypoint: tile → embed → index → eval → log
 ├── README.md                      # quickstart + reproduction instructions
-├── PLAN.md                        # this document, copied in post-approval
+├── PLAN.md                        # this document
 ├── EXPERIMENT_LOG.md              # human-readable narrative log
-├── .gitignore                     # data/, .venv/, __pycache__, *.pt, *.bin
+├── .gitignore                     # data/, bimap/, tests/, __pycache__, *.faiss, *.npy …
 ├── configs/
 │   ├── phase0_mvp.yaml            # canonical MVP config (single source of truth)
 │   └── runs/                      # immutable per-run config snapshots (git-tracked)
@@ -75,49 +80,19 @@ HistoRag-BIMAP/
 ├── data/                          # git-ignored
 │   ├── raw/                       # downloaded HANCOCK WSIs
 │   ├── patches/                   # tiled patches + manifest.parquet
-│   └── indexes/                   # saved FAISS indexes + patch_id arrays
-├── src/histoRAG/
+│   └── indexes/                   # cached embeddings (.npy) + FAISS indexes
+├── histoRAG/
 │   ├── __init__.py                # exports __version__
-│   ├── data/
-│   │   ├── __init__.py
-│   │   ├── wsi_loader.py          # OpenSlide wrapper (magnification selection)
-│   │   ├── tiler.py               # Otsu tissue filter + grid tiling
-│   │   └── dataset.py             # PatchDataset (torch.utils.data.Dataset)
-│   ├── encoders/
-│   │   ├── __init__.py
-│   │   ├── base.py                # Encoder ABC
-│   │   ├── clip.py                # ClipEncoder (MVP)
-│   │   ├── uni.py                 # UNIEncoder stub (Phase 1)
-│   │   └── registry.py            # name → class lookup for config-driven selection
-│   ├── index/
-│   │   ├── __init__.py
-│   │   ├── base.py                # VectorIndex ABC
-│   │   └── faiss_index.py         # FaissFlatIP (+save/load)
-│   ├── eval/
-│   │   ├── __init__.py
-│   │   ├── metrics.py             # top_k_accuracy, mean_average_precision
-│   │   └── protocol.py            # query/gallery split (seeded)
-│   ├── viz/
-│   │   ├── __init__.py
-│   │   └── streamlit_app.py       # demo UI
-│   └── utils/
-│       ├── __init__.py
-│       ├── config.py              # YAML load + validate + config hash
-│       ├── logging.py             # append row to experiments.csv + snapshot config
-│       └── seeds.py               # set_all_seeds(seed)
-├── scripts/
-│   ├── download_hancock.py        # fetch chosen slide IDs to data/raw/
-│   ├── tile_wsis.py               # WSI dir → patches + manifest.parquet
-│   ├── embed_patches.py           # patches + manifest → embeddings + FAISS index
-│   ├── evaluate.py                # run retrieval eval, append to experiments.csv
-│   └── run_mvp.py                 # orchestrates tile → embed → eval end-to-end
-└── tests/
+│   ├── tile.py                    # WSI class + Otsu tissue filter + Tiler
+│   ├── embed.py                   # ClipEncoder + FaissFlatIP
+│   ├── retrieve.py                # top_k_accuracy, mAP@k, query/gallery split
+│   └── log.py                     # load_config, hash_config, set_all_seeds, append_experiment_row
+└── tests/                         # gitignored — local regression tests only
     ├── __init__.py
-    ├── conftest.py                # shared fixtures (synthetic slide, dummy manifest)
-    ├── test_tiler.py
-    ├── test_encoder.py
-    ├── test_index.py
-    └── test_eval.py
+    ├── conftest.py                # shared fixtures (dummy manifest, random embeddings)
+    ├── test_tile.py
+    ├── test_embed.py
+    └── test_retrieve.py
 ```
 
 ---
@@ -397,15 +372,14 @@ Repo currently contains only `docs/` and `CLAUDE.md` — no Python source, no re
 
 ## Verification (end-to-end MVP acceptance)
 
-1. **Install**: fresh venv → `pip install -e ".[dev]"` → `python -c "import histoRAG; print(histoRAG.__version__)"` → `0.0.1`.
-2. **Tests**: `pytest tests/ -q` → all green; optional `pytest --cov=histoRAG` to check coverage.
-3. **Pipeline**: `python scripts/run_mvp.py --config configs/phase0_mvp.yaml --seed 42` → produces tiles (if not cached), embeddings, FAISS index, appends 1 row to `experiments/experiments.csv`.
+1. **Install deps**: `pip install -r requirements.txt` → `python -c "import histoRAG; print(histoRAG.__version__)"` → `0.1.0`.
+2. **Tests**: `pytest tests/ -q` → all green (tests are gitignored, run locally only).
+3. **Pipeline**: `python pipeline.py --config configs/phase0_mvp.yaml --seed 42` → tiles (if not cached), embeds, builds FAISS index, appends 1 row to `experiments/experiments.csv`.
 4. **Reproducibility**: re-run with same seed → identical metrics bit-exact (within FAISS tie-breaking tolerance).
 5. **Seeds**: run for 42, 123, 2024 → 3 rows; mean ± std reported in `EXPERIMENT_LOG.md`.
-6. **Demo**: `streamlit run src/histoRAG/viz/streamlit_app.py` → browser opens; upload patch; top-k grid displays with metadata.
 7. **Grading-rubric dry-check** (Code pillar, 20 P possible):
    - Reproducibility (5 P): fixed seeds + config snapshots + `config_hash` + `git_commit` in CSV ✓
-   - Structure & docs (5 P): `src/` layout, docstrings on every public symbol, README quickstart ✓
+   - Structure & docs (5 P): flat `histoRAG/` package, README quickstart ✓
    - Evaluation correctness (5 P): unit-tested metrics, documented protocol, random baseline ✓
    - Experimental log (5 P): `experiments.csv` + `configs/runs/*.yaml` + `EXPERIMENT_LOG.md` narrative ✓
 
@@ -415,11 +389,12 @@ Repo currently contains only `docs/` and `CLAUDE.md` — no Python source, no re
 
 | Phase | Extension | MVP hook already in place |
 |---|---|---|
-| Phase 1 — Formalize | CLIP vs UNI2-h (+ ResNet50, OpenCLIP) ablation | `encoders/registry.py` + config `encoder: <name>` |
-| Phase 1 — Index ablation | FAISS Flat vs IVF vs HNSW | `index/base.py` ABC; new subclass = swap `index: <type>` in config |
-| Phase 2 — Pro-1 text query | CLIP text tower | `ClipEncoder` already loads text module; `.encode_text()` method documented and disabled |
-| Phase 2 — Pro-3 cross-slide | Leave-slide-out eval split | `eval/protocol.py` has `slide_leave_out` function (stubbed + tested, unused in MVP) |
-| Phase 3 — Pro-2 LLM descriptions | Feed top-k context → lightweight LLM | Post-retrieval module; separate file, doesn't touch MVP code paths |
+| Phase 1 — Formalize | CLIP vs UNI2-h (+ ResNet50, OpenCLIP) ablation | Add new encoder class to `histoRAG/embed.py`; swap `encoder.name` in config |
+| Phase 1 — Index ablation | FAISS Flat vs IVF vs HNSW | Add new index class to `histoRAG/embed.py`; swap `index.name` in config |
+| Phase 2 — Pro-1 text query | CLIP text tower | Add `encode_text()` to `ClipEncoder` in `histoRAG/embed.py` |
+| Phase 2 — Pro-3 cross-slide | Leave-slide-out eval split | `slide_leave_out()` already in `histoRAG/retrieve.py`, unused in Phase 0 |
+| Phase 3 — Pro-2 LLM descriptions | Feed top-k context → lightweight LLM | New file `histoRAG/describe.py`; doesn't touch existing code |
+| Future — pip-installable | Package for distribution | Add `pyproject.toml` back; zero code changes needed |
 
 ---
 

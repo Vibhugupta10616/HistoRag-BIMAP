@@ -1,11 +1,17 @@
-# Data (large, never commit)
-data/raw/
-data/patches/
-data/indexes/
+# Tests (local only, not tracked)
+tests/
 
-# Virtual environment
+# Virtualenv
 bimap/
 .venv/
+
+# Data (large files, not for git)
+data/
+
+# Generated outputs
+graphify-out/
+experiments/experiments.csv
+configs/runs/
 
 # Python
 __pycache__/
@@ -17,30 +23,22 @@ dist/
 build/
 .eggs/
 
-# Model weights
+# ML artifacts
 *.pt
 *.pth
 *.bin
 *.safetensors
-
-# FAISS indexes
 *.faiss
+*.npy
 
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb
 
-# IDE
+# IDE / OS
 .vscode/
 .idea/
-
-# OS
 .DS_Store
 Thumbs.db
-
-# Experiment artifacts (keep CSV and configs, not large embeddings)
-data/indexes/
-
-# Keep these tracked
-!experiments/experiments.csv
-!configs/runs/.gitkeep
+*.stackdump
+*.swp
