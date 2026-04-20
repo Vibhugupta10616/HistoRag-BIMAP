@@ -11,11 +11,11 @@ run:
 data:
   dataset: hancock5
   raw_dir: data/raw
-  slide_ids:                    # fill in after downloading slides (Step 2)
-    - TBD_slide_01
-    - TBD_slide_02
-  label_source: slide_level     # "slide_level" | "patch_level" — confirm at Step 2
-  label_map: null               # path to JSON {slide_id: label} — fill at Step 2
+  slide_ids:
+    - InvasionFront_CD3_block1
+    - TumorCenter_CD3_block1
+  label_source: slide_level
+  label_map: configs/label_map.json
 
 tiling:
   magnification: 20
