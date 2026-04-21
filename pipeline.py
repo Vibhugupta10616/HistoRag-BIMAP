@@ -115,7 +115,7 @@ def evaluate(index: FaissFlatIP, embeddings: np.ndarray, manifest: pd.DataFrame,
     print(f"Split: {len(query_idx)} query  /  {len(gallery_idx)} gallery")
 
     query_embs = embeddings[query_idx]
-    query_labels = manifest.loc[query_idx, "label"].values
+    query_labels = np.asarray(manifest.loc[query_idx, "label"])
     max_k = max(max(eval_cfg["k_values"]), eval_cfg["compute_map_at"])
 
     sims, retrieved_ids = index.search(query_embs, k=max_k + 1)
