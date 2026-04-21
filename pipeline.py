@@ -16,7 +16,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from histoRAG.embed import ClipEncoder, FaissFlatIP
-from histoRAG.log import append_experiment_row, hash_config, load_config, set_all_seeds
+from histoRAG.log import append_experiment_row, embed_cache_key, hash_config, load_config, set_all_seeds
 from histoRAG.retrieve import mean_average_precision, random_baseline, stratified_within_slide, top_k_accuracy
 from histoRAG.tile import Tiler, WSI
 
@@ -77,7 +77,7 @@ def tile(cfg: dict) -> pd.DataFrame:
 def embed(manifest: pd.DataFrame, cfg: dict) -> tuple[np.ndarray, np.ndarray]:
     """Encode all patches with CLIP, cache embeddings, build and save FAISS index."""
     enc_cfg, idx_cfg = cfg["encoder"], cfg["index"]
-    cfg_hash = hash_config(cfg)
+    cfg_hash = embed_cache_key(cfg)
     cache_dir = Path("data/indexes") / cfg_hash
     emb_path = cache_dir / "embeddings.npy"
     ids_path = cache_dir / "patch_int_ids.npy"
@@ -148,49 +148,65 @@ def evaluate(index: FaissFlatIP, embeddings: np.ndarray, manifest: pd.DataFrame,
 def main():
     parser = argparse.ArgumentParser(description="HistoRAG pipeline")
     parser.add_argument("--config", required=True)
-    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=None, help="Single seed (overrides config).")
+    parser.add_argument("--seeds", nargs="+", type=int, default=None,
+                        help="Multiple seeds — embeddings computed once, evaluation repeated per seed.")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
-    if args.seed is not None:
-        cfg["run"]["seed"] = args.seed
-    seed = cfg["run"]["seed"]
-    set_all_seeds(seed)
+
+    if args.seeds:
+        seeds = args.seeds
+    elif args.seed is not None:
+        seeds = [args.seed]
+    else:
+        seeds = [cfg["run"]["seed"]]
 
     print(f"\n{'='*60}")
-    print(f"HistoRAG  |  seed={seed}  |  encoder={cfg['encoder']['name']}")
+    print(f"HistoRAG  |  seeds={seeds}  |  encoder={cfg['encoder']['name']}")
     print(f"{'='*60}\n")
 
-    # Step 1: Tile
+    # Step 1: Tile (seed-independent)
+    set_all_seeds(seeds[0])
     manifest = tile(cfg)
     print(f"Manifest: {len(manifest)} patches across {manifest['slide_id'].nunique()} slides\n")
 
-    # Step 2: Embed + cache
+    # Step 2: Embed + cache (seed-independent — CLIP output is deterministic)
     t0 = time.time()
     embeddings, int_ids = embed(manifest, cfg)
     embed_time = time.time() - t0
 
-    # Step 3: Build index
+    # Step 3: Build index (seed-independent)
     t0 = time.time()
     index = build_index(embeddings, int_ids, save_path=cfg["index"]["save_path"])
     index_time = time.time() - t0
 
-    # Step 4: Evaluate
-    t0 = time.time()
-    metrics, _ = evaluate(index, embeddings, manifest, cfg)
-    query_time = time.time() - t0
+    # Steps 4-5: Evaluate and log for each seed
+    for i, seed in enumerate(seeds):
+        cfg["run"]["seed"] = seed
+        set_all_seeds(seed)
+        print(f"\n{'─'*40}")
+        print(f"Seed {seed}  ({i+1}/{len(seeds)})")
+        print(f"{'─'*40}")
 
-    print("\nResults:")
-    for k in cfg["eval"]["k_values"]:
-        print(f"  top-{k:2d} accuracy : {metrics[f'top{k}']:.4f}")
-    print(f"  mAP@{cfg['eval']['compute_map_at']}          : {metrics['map_at_10']:.4f}")
-    print(f"  random baseline (top-5): {metrics['random_baseline_top5']:.4f}")
+        t0 = time.time()
+        metrics, _ = evaluate(index, embeddings, manifest, cfg)
+        query_time = time.time() - t0
 
-    # Step 5: Log
-    timings = {"embed_time_s": round(embed_time, 2), "index_time_s": round(index_time, 2), "query_time_s": round(query_time, 2)}
-    uid = append_experiment_row(cfg, metrics, timings, notes=f"Phase 0 baseline, seed {seed}")
-    print(f"\nLogged as: {uid}")
-    print(f"Config snapshot: configs/runs/{uid}.yaml")
+        print("\nResults:")
+        for k in cfg["eval"]["k_values"]:
+            print(f"  top-{k:2d} accuracy : {metrics[f'top{k}']:.4f}")
+        print(f"  mAP@{cfg['eval']['compute_map_at']}          : {metrics['map_at_10']:.4f}")
+        print(f"  random baseline (top-5): {metrics['random_baseline_top5']:.4f}")
+
+        timings = {
+            "embed_time_s": round(embed_time, 2) if i == 0 else 0.0,
+            "index_time_s": round(index_time, 2) if i == 0 else 0.0,
+            "query_time_s": round(query_time, 2),
+        }
+        uid = append_experiment_row(cfg, metrics, timings, notes=f"Phase 0 baseline, seed {seed}")
+        print(f"\nLogged as: {uid}")
+        print(f"Config snapshot: configs/runs/{uid}.yaml")
 
 
 if __name__ == "__main__":

@@ -33,6 +33,17 @@ def hash_config(cfg: dict[str, Any]) -> str:
     return hashlib.sha256(raw).hexdigest()[:12]
 
 
+def embed_cache_key(cfg: dict[str, Any]) -> str:
+    """Config hash for the embedding cache — excludes run.seed.
+
+    CLIP encoding is deterministic; only the query/gallery split varies by seed.
+    All seeds for the same encoder+data config share one cache directory.
+    """
+    cfg_copy = {**cfg, "run": {k: v for k, v in cfg.get("run", {}).items() if k != "seed"}}
+    raw = json.dumps(cfg_copy, sort_keys=True, ensure_ascii=True, default=str).encode()
+    return hashlib.sha256(raw).hexdigest()[:12]
+
+
 def set_all_seeds(seed: int) -> None:
     """Set seeds for Python random, NumPy, and PyTorch for reproducibility."""
     random.seed(seed)
