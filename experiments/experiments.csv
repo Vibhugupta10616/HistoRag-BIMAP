@@ -1,1 +1,2 @@
 uid,date_utc,git_commit,config_hash,config_path,encoder,index,dataset,num_patches,num_query,num_gallery,seed,top1,top5,top10,map_at_10,random_baseline_top5,embed_time_s,index_time_s,query_time_s,notes
+20260421_001_clip-vitb16_faiss-flatip_hancock5_seed42,2026-04-21T07:47:18.174532+00:00,c64e78b88bcac8d83f6da5ad5ab39904549c945d,1c8c3dbe9bdc,configs\runs\20260421_001_clip-vitb16_faiss-flatip_hancock5_seed42.yaml,clip-vitb16,faiss-flatip,hancock5,3044,609,2435,42,0.8998357963875205,0.9967159277504105,1.0,0.8989561429692597,0.96875,145.0,0.16,1.53,"Phase 0 baseline, seed 42"

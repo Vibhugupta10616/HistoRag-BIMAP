@@ -16,14 +16,8 @@ pip install -e ".[dev]"
 # 3. Verify install
 python -c "import histoRAG; print(histoRAG.__version__)"
 
-# 4. Run tests
-pytest tests/ -q
-
-# 5. Run MVP pipeline (after placing WSIs in data/raw/ and updating configs/phase0_mvp.yaml)
-python scripts/run_mvp.py --config configs/phase0_mvp.yaml --seed 42
-
-# 6. Launch demo
-streamlit run src/histoRAG/viz/streamlit_app.py
+# 4. Run MVP pipeline (after placing WSIs in data/raw/ and updating configs/phase0_mvp.yaml)
+python pipeline.py --config configs/phase0_mvp.yaml --seed 42
 ```
 
 ## Dataset
