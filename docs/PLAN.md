@@ -1,7 +1,5 @@
 # HistoRAG — Phase 0 MVP Execution Plan (Individual)
 
-> **Plan history**: Ultraplan (remote) variant rejected on 2026-04-16 — it dropped the Phase-1 UNI2-h experiment hook and silently switched the demo from Streamlit to Gradio, both contrary to locked decisions. This local plan is the authoritative version.
->
 > **Phase 0 status (2026-04-21): COMPLETE.** Pipeline fully implemented and executed. 3-seed baseline logged (seeds 42, 123, 2024) with 3,044 patches from 2 HANCOCK slides. Results: top-1 = 0.892 ± 0.011 · top-5 = 0.994 ± 0.002 · top-10 = 0.999 ± 0.001 · mAP@10 = 0.894 ± 0.004. **Remaining**: Streamlit demo (Step 9) and presentation prep (Step 10).
 >
 > **Structural simplification applied**: The original plan specified a `pyproject.toml` + `src/` pip-installable layout with separate `encoders/`, `index/`, `eval/`, and `utils/` sub-packages. This was refactored to a flat `histoRAG/` package with `requirements.txt`. All sub-packages were consolidated: `tile.py`, `embed.py`, `retrieve.py`, `log.py`. See updated repo structure and critical-files sections below.
@@ -11,12 +9,7 @@
 ## Context
 
 **Project**: HISTORAG — Retrieval-Augmented Histopathology Atlas (FAU BIMAP SS2026).
-**Role**: Individual project. Course lists three students on HISTORAG (Vibhu Gupta, Satyaki Bhattacharjee, Taimoor Ajmal), but each delivers the full pipeline independently with their own experimental setup (e.g., different encoders, different index variants). **This plan is scoped to Vibhu only**.
-**Main contact**: Prof. Dr. Andreas Kist (andreas.kist@fau.de).
-**Deadline**: MVP presentation **Fri 2026-04-24** (~8 days from today, 2026-04-16).
 **Gate semantics**: Phase 0 MVP is pass/fail for continuing in the course (kickoff deck slide: "Gate to stay in project").
-
-**Why this plan exists**: Course docs (`docs/BIMAP SS26 - Kickoff.pdf`, `docs/HISTORAG – Retrieval.pdf`) specify a semester-long research project styled like a mini NeurIPS paper — not a Kaggle notebook. Scientific discipline is enforced: every experiment must have hypothesis / single controlled change / documented configuration / run ID / metric / interpretation. Tier-A logging is mandatory: `experiments.csv`, `config.yaml` per run, ≥3 seeds per experiment. "Vibe coding" is explicitly discouraged — every line must be explainable at the *what does it do* level (e.g., "computes the local attention mask"), not merely *how does it work mechanically*.
 
 **Phase 0 goal**: Deliver an end-to-end `WSI → patch → embedding → FAISS → top-k retrieval` pipeline with evaluation and a live demo, architected so Phase 1 baselines comparison and Pro-tasks (text query, LLM descriptions, cross-slide) are config-swap extensions rather than rewrites.
 
