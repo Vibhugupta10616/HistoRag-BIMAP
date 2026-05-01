@@ -24,7 +24,10 @@
       "Bash(nvidia-smi --query-gpu=name,driver_version,compute_cap --format=csv,noheader)",
       "Bash(nvidia-smi)",
       "Bash(bimap/Scripts/pip uninstall *)",
-      "Bash(bimap/Scripts/pip install *)"
+      "Bash(bimap/Scripts/pip install *)",
+      "Bash(mkdir -p \"D:/College/Sem_5/HistoRag-BIMAP/.streamlit\")",
+      "Bash(mkdir -p \"D:/College/Sem_5/HistoRag-BIMAP/histoRAG/viz\")",
+      "Bash(bimap\\\\Scripts\\\\activate)"
     ]
   }
 }
