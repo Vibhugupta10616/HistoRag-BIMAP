@@ -42,3 +42,17 @@ build/
 Thumbs.db
 *.stackdump
 *.swp
+
+# Claude / code-review tooling
+.claude/
+.code-review-graph/
+
+# Utility scripts (local preprocessing, not part of pipeline)
+svs_to_png/
+
+# Streamlit runtime logs
+streamlit_out.txt
+streamlit_err.txt
+
+# Streamlit local config (theme committed, secrets are not)
+.streamlit/secrets.toml
