@@ -14,12 +14,28 @@ import numpy as np
 import torch
 import yaml
 
-_CSV_FIELDS = [
+# Phase 0 fields — kept for backward compatibility with existing experiments.csv rows.
+_CSV_FIELDS_V0 = [
     "uid", "date_utc", "git_commit", "config_hash", "config_path",
     "encoder", "index", "dataset", "num_patches", "num_query", "num_gallery",
     "seed", "top1", "top5", "top10", "map_at_10", "random_baseline_top5",
     "embed_time_s", "index_time_s", "query_time_s", "notes",
 ]
+
+# Phase 1 additions — slide-level metrics and encoder cost metrics.
+_CSV_FIELDS_V1_EXTRA = [
+    "eval_level",           # "patch" | "slide"
+    "num_slides",           # total slides in dataset
+    "num_query_slides",     # slides used as queries
+    "num_gallery_slides",   # slides used as gallery
+    "slide_top1",           # slide-level top-1 accuracy
+    "slide_map_at_k",       # slide-level mAP@K (K from config)
+    "param_count",          # total encoder parameters
+    "peak_vram_mb",         # peak GPU memory during encoding (null on CPU)
+    "throughput_patches_per_sec",  # encoding speed
+]
+
+_CSV_FIELDS = _CSV_FIELDS_V0 + _CSV_FIELDS_V1_EXTRA
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
@@ -36,8 +52,8 @@ def hash_config(cfg: dict[str, Any]) -> str:
 def embed_cache_key(cfg: dict[str, Any]) -> str:
     """Config hash for the embedding cache — excludes run.seed.
 
-    CLIP encoding is deterministic; only the query/gallery split varies by seed.
-    All seeds for the same encoder+data config share one cache directory.
+    Encoding is deterministic given fixed encoder + data; only the
+    query/gallery split varies by seed, so all seeds share one cache dir.
     """
     cfg_copy = {**cfg, "run": {k: v for k, v in cfg.get("run", {}).items() if k != "seed"}}
     raw = json.dumps(cfg_copy, sort_keys=True, ensure_ascii=True, default=str).encode()
@@ -63,6 +79,18 @@ def _git_commit() -> str:
         return "unknown"
 
 
+def _read_csv_fields(csv_path: Path) -> list[str]:
+    """Return the field names from the first line of an existing CSV, or _CSV_FIELDS if empty."""
+    if not csv_path.exists() or csv_path.stat().st_size == 0:
+        return _CSV_FIELDS
+    with open(csv_path, newline="") as f:
+        reader = csv.reader(f)
+        try:
+            return next(reader)
+        except StopIteration:
+            return _CSV_FIELDS
+
+
 def append_experiment_row(
     cfg: dict[str, Any],
     metrics: dict[str, Any],
@@ -75,9 +103,8 @@ def append_experiment_row(
 
     Returns the run UID. Raises FileExistsError if the UID already exists.
 
-    The UID encodes: date, run number, encoder, index, dataset, seed —
-    satisfying the professor's requirement for documented run IDs.
-    Config snapshot in configs/runs/<uid>.yaml satisfies documented configuration.
+    Field schema is backward-compatible: Phase 0 rows have empty strings for the
+    Phase 1 extra columns; Phase 1 rows populate all columns.
     """
     experiments_dir, runs_dir = Path(experiments_dir), Path(runs_dir)
     experiments_dir.mkdir(parents=True, exist_ok=True)
@@ -92,7 +119,7 @@ def append_experiment_row(
     csv_path = experiments_dir / "experiments.csv"
     existing: set[str] = set()
     if csv_path.exists():
-        with open(csv_path) as f:
+        with open(csv_path, newline="") as f:
             existing = {row["uid"] for row in csv.DictReader(f)}
 
     uid = f"{date_str}_{len(existing)+1:03d}_{encoder}_{index_name}_{dataset}_seed{seed}"
@@ -103,29 +130,51 @@ def append_experiment_row(
     with open(snapshot, "w") as f:
         yaml.dump(cfg, f, default_flow_style=False, sort_keys=True)
 
-    row = {
+    # Use the field list already written as the CSV header for backward compat.
+    # New files get the full Phase 1 schema; existing Phase 0 CSVs keep their schema.
+    fieldnames = _read_csv_fields(csv_path)
+
+    row: dict[str, Any] = {f: "" for f in fieldnames}
+    row.update({
         "uid": uid,
         "date_utc": datetime.now(timezone.utc).isoformat(),
         "git_commit": _git_commit(),
         "config_hash": hash_config(cfg),
         "config_path": str(snapshot),
-        "encoder": encoder, "index": index_name, "dataset": dataset,
+        "encoder": encoder,
+        "index": index_name,
+        "dataset": dataset,
         "num_patches": metrics.get("num_patches", ""),
         "num_query": metrics.get("num_query", ""),
         "num_gallery": metrics.get("num_gallery", ""),
         "seed": seed,
-        "top1": metrics.get("top1", ""), "top5": metrics.get("top5", ""),
-        "top10": metrics.get("top10", ""), "map_at_10": metrics.get("map_at_10", ""),
+        "top1": metrics.get("top1", ""),
+        "top5": metrics.get("top5", ""),
+        "top10": metrics.get("top10", ""),
+        "map_at_10": metrics.get("map_at_10", ""),
         "random_baseline_top5": metrics.get("random_baseline_top5", ""),
         "embed_time_s": timings.get("embed_time_s", ""),
         "index_time_s": timings.get("index_time_s", ""),
         "query_time_s": timings.get("query_time_s", ""),
         "notes": notes,
-    }
+        # Phase 1 fields — empty string if not provided (Phase 0 rows)
+        "eval_level": metrics.get("eval_level", ""),
+        "num_slides": metrics.get("num_slides", ""),
+        "num_query_slides": metrics.get("num_query_slides", ""),
+        "num_gallery_slides": metrics.get("num_gallery_slides", ""),
+        "slide_top1": metrics.get("slide_top1", ""),
+        "slide_map_at_k": metrics.get("slide_map_at_k", ""),
+        "param_count": metrics.get("param_count", ""),
+        "peak_vram_mb": metrics.get("peak_vram_mb", ""),
+        "throughput_patches_per_sec": metrics.get("throughput_patches_per_sec", ""),
+    })
+
+    # Only write fields that exist in the current CSV schema
+    row = {k: row[k] for k in fieldnames if k in row}
 
     write_header = not csv_path.exists() or csv_path.stat().st_size == 0
     with open(csv_path, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=_CSV_FIELDS)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         if write_header:
             writer.writeheader()
         writer.writerow(row)

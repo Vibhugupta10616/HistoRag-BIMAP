@@ -1,5 +1,107 @@
 # HistoRAG — Phase 0 MVP Execution Plan (Individual)
 
+---
+
+## Phase 1 Hypotheses (defined 2026-05-21, professor meeting)
+
+> **Required reading before implementation:**
+> - HANCOCK paper — Dörrich et al., *Nature Communications* (Nat Commun 16, 7163, 2025) — [PMC open access](https://pmc.ncbi.nlm.nih.gov/articles/PMC12322140/)
+> - CLAM — Mahmood Lab (attention MIL; the HANCOCK paper itself uses CLAM for tumour localization)
+>
+> **HANCOCK annotation facts (verified from paper):**
+> - Tumour regions: sparse QuPath polygon annotations → `.geojson` files. Only tumour ROIs marked; non-tumour has no class label.
+> - Anatomical site (oropharynx / larynx / oral cavity): **per-patient label from clinical metadata**, not per-patch.
+> - Scale: 763 patients · 701 primary tumour WSIs · 396 lymph node WSIs.
+> - Patch labelling strategy: patch = "tumour" if center falls inside a `.geojson` polygon, "other" otherwise.
+
+### H1 — Unsupervised tumour grouping + XAI
+
+**Question:** Do frozen encoder embeddings naturally group tumour patches together — without ever seeing labels?
+
+Clustering is performed with no label information. The `.geojson` annotations are used **only at evaluation time** to compare cluster assignments against ground truth.
+
+| Item | Detail |
+|---|---|
+| Labels (evaluation only) | QuPath `.geojson` polygon annotations — patch center inside polygon = tumour |
+| Input | Frozen patch embeddings from CLIP, CONCH, UNI2-h |
+| Task | **Unsupervised** — K-means clustering; no model training |
+| Cluster-to-label mapping | Majority vote per cluster against `.geojson` ground truth |
+| Metrics | Accuracy, Precision, Recall — per encoder |
+| XAI | Deferred — strategy decided after clustering results; planned: centroid-difference dimension ranking |
+| Scientific value | Tests whether each encoder's space *naturally* separates tumour tissue; comparison across encoders reveals domain-transfer quality |
+
+**Two experiments — two questions:**
+
+| Experiment | k | Question |
+|---|---|---|
+| `exp01_kmeans_k2` | 2 | Is tumour the **dominant** axis of variation? |
+| `exp02_overcluster_assign` | 8 | Is tumour signal **present at all**, even if buried? |
+
+Interpretation matrix:
+
+| exp01 (k=2) | exp02 (k=8) | Conclusion |
+|---|---|---|
+| Pass | Pass | Tumour is the dominant signal — strong encoder |
+| Fail | Pass | Tumour signal exists but is buried — weak encoder |
+| Fail | Fail | Encoder does not encode tumour-discriminative features |
+
+---
+
+### H2 — How do patients relate to each other on a patch level?
+
+H2 has two sub-questions, both at patient level.
+
+#### H2 Q1 — Do aggregated patient embeddings cluster by anatomical site? *(patient level, all patches)*
+
+**Question:** When we aggregate all patch embeddings per patient into one WSI-level vector, does the patient-patient correlation matrix naturally form 3 clusters (oropharynx / larynx / oral cavity)?
+
+| Item | Detail |
+|---|---|
+| Input | All patches per patient (~5,000/patient); per-patient anatomical site label from clinical metadata (OPX / LAR / OC) |
+| Method | Embed all patches → mean pool per patient → 1 vector/patient → UMAP → N×N cosine similarity/correlation matrix |
+| Expected UMAP | 3 distinct clusters: Oropharynx (OPX), Larynx (LAR), Oral Cavity (OC) patients visually separated |
+| Expected correlation map | Block-diagonal pattern — high within-site similarity, weaker across-site similarity |
+| Key observation | WSI-level aggregated embeddings capture anatomical location signal; patients from the same site are more similar to each other |
+| CLAM baseline | CLAM (used in HANCOCK paper itself) does this with attention weighting — read before implementing |
+
+#### H2 Q2 — How similar is cancer tissue across patients regardless of site? *(tumour patches only)*
+
+**Question:** When using only tumour/cancer patches per patient, how similar are patients to each other — irrespective of their anatomical site?
+
+| Item | Detail |
+|---|---|
+| Input | Only tumour patches per patient — patch center inside `.geojson` polygon = tumour |
+| **UMAP** | Individual tumour patch embeddings (no aggregation), coloured by patient/site → expected: OPX, LAR, OC patches **mixed**, no site-based separation |
+| **Correlation map — adaptive** | Depends on tumour patch count per patient — check distribution first (see below) |
+| Expected correlation map | Uniformly high similarity across all patients (warm/red heatmap) — no block-diagonal structure |
+| Key observation | Cancer tissue shares common histopathological patterns across anatomical sites — tumour patches are more similar across patients than WSI-level embeddings |
+| Clinical relevance | Shared cancer histology across sites; morphologically similar tumours may share prognosis or treatment response |
+| Implementation note | `.geojson` polygons in WSI coordinate space; patch center inside polygon = tumour |
+
+**Correlation map — adaptive strategy based on tumour patch count:**
+
+> First step: compute tumour patch count per patient after `.geojson` extraction and inspect the distribution.
+
+| Tumour patches per patient | Correlation map method |
+|---|---|
+| Median > ~20 patches | Aggregate: mean pool tumour patches → 1 vector/patient → N×N **patient** × patient matrix |
+| Median < ~10 patches | No aggregation: each tumour patch is its own entry → **patch** × patch matrix, axes grouped by patient |
+
+Rationale: mean-pooling with very few patches per patient risks diluting the embedding signal. With enough patches, aggregation is stable and produces a cleaner patient-level view.
+
+---
+
+### H1 vs H2 relationship to Phase 1 baseline
+
+| Baseline / Hypothesis | Patch scope | Aggregation | Expected output |
+|---|---|---|---|
+| Phase 1 baseline | All patches | Mean pool → 1 vector/patient | Patient retrieval (top-K similar patients) |
+| H1 | All patches | None (per-patch classification) | Tumour vs other accuracy + XAI dimension importance |
+| H2 Q1 | All patches | Mean pool → 1 vector/patient → N×N correlation matrix | Block-diagonal heatmap — 3 clusters by anatomical site |
+| H2 Q2 | Cancer patches only | Mean pool → 1 vector/patient → N×N correlation matrix | Uniformly high similarity — shared cancer histology across sites |
+
+---
+
 > **Phase 0 status (2026-04-21): COMPLETE.** Pipeline fully implemented and executed. 3-seed baseline logged (seeds 42, 123, 2024) with 3,044 patches from 2 HANCOCK slides. Results: top-1 = 0.892 ± 0.011 · top-5 = 0.994 ± 0.002 · top-10 = 0.999 ± 0.001 · mAP@10 = 0.894 ± 0.004. **Remaining**: Streamlit demo (Step 9) and presentation prep (Step 10).
 >
 > **Structural simplification applied**: The original plan specified a `pyproject.toml` + `src/` pip-installable layout with separate `encoders/`, `index/`, `eval/`, and `utils/` sub-packages. This was refactored to a flat `histoRAG/` package with `requirements.txt`. All sub-packages were consolidated: `tile.py`, `embed.py`, `retrieve.py`, `log.py`. See updated repo structure and critical-files sections below.
@@ -395,8 +497,9 @@ eval:
 
 | Phase | Extension | MVP hook already in place |
 |---|---|---|
-| Phase 1 — Formalize | CLIP vs UNI2-h (+ ResNet50, OpenCLIP) ablation | Add `UNIEncoder` class to `histoRAG/embed.py`; swap `encoder.name` in config YAML |
-| Phase 1 — Index ablation | FAISS Flat vs IVF vs HNSW | Add `FaissIVF` / `FaissHNSW` to `histoRAG/embed.py`; swap `index.name` in config YAML |
+| Phase 1 — Formalize | Slide-level retrieval: mean-pool patch embeddings per slide → FAISS on slide vectors; compare CLIP vs CONCH vs UNI2-h at slide level | Add aggregation module to `histoRAG/embed.py`; add `CONCHEncoder` + `UNIEncoder`; update `pipeline.py` to evaluate at slide level |
+| Phase 1 — Index ablation | FAISS Flat vs IVF vs HNSW on slide vectors | Add `FaissIVF` / `FaissHNSW` to `histoRAG/embed.py`; swap `index.name` in config YAML |
+| Phase 2 — Spatial arrangement | Mean pooling loses spatial layout of tissue compartments (e.g., tumor-stroma interface). Attention-weighted aggregation (ABMIL) or graph-based spatial models can capture this. Clinically relevant: two slides with identical tissue fractions but different layouts currently produce the same retrieval result. | New `histoRAG/aggregate.py` with ABMIL or GNN aggregator; plug into pipeline via `aggregation.method` config key |
 | Phase 2 — Pro-1 text query | CLIP text tower | Add `encode_text()` to `ClipEncoder` in `histoRAG/embed.py` (vision tower already used) |
 | Phase 2 — Pro-3 cross-slide | Leave-slide-out eval split | `slide_leave_out()` already implemented in `histoRAG/retrieve.py`, unused in Phase 0 |
 | Phase 3 — Pro-2 LLM descriptions | Feed top-k context → lightweight LLM | New file `histoRAG/describe.py`; no changes to existing modules |

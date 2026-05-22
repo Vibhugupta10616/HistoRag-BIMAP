@@ -5,7 +5,7 @@
 run:
   name: phase0_mvp
   seed: 42                      # overridden by --seed CLI flag
-  out_dir: experiments/
+  out_dir: MVP/results/
   device: auto                  # "auto" | "cuda" | "cpu"
 
 data:
@@ -15,7 +15,7 @@ data:
     - InvasionFront_CD3_block1
     - TumorCenter_CD3_block1
   label_source: slide_level
-  label_map: configs/label_map.json
+  label_map: MVP/configs/label_map.json
 
 tiling:
   magnification: 20

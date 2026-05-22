@@ -12,7 +12,7 @@ from pathlib import Path
 
 from histoRAG.log import embed_cache_key, load_config
 
-# Repo root — two levels above histoRAG/viz/
+# Repo root -- two levels above MVP/viz/
 _ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -27,7 +27,7 @@ def _cache_key(config_path: str) -> str:
 # Set  "placeholder": True  for phases that don't have data yet; the app will
 # render an informational screen instead of the retrieval interface.
 
-_P0_KEY = _cache_key("configs/phase0_mvp.yaml")
+_P0_KEY = _cache_key("MVP/configs/phase0_mvp.yaml")
 
 PHASES: dict[str, dict] = {
     # ── Phase 0 ── CLIP ViT-B/16 on TMA blocks (baseline) ───────────────────

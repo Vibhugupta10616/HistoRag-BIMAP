@@ -12,10 +12,10 @@
 ## Running the Pipeline
 ```bash
 # Single seed
-python pipeline.py --config configs/phase0_mvp.yaml --seed 42
+python MVP/pipeline.py --config MVP/configs/phase0_mvp.yaml --seed 42
 
 # Multiple seeds (embeddings computed once, eval repeated per seed)
-python pipeline.py --config configs/phase0_mvp.yaml --seeds 42 123 2024
+python MVP/pipeline.py --config MVP/configs/phase0_mvp.yaml --seeds 42 123 2024
 ```
 
 ## Update CLAUDE.md for New Insights

@@ -1,0 +1,42 @@
+experiment:
+  name: H2_exp01_site_clustering
+  hypothesis: H2
+  question: Q1
+  description: >
+    Aggregate all patch embeddings per patient (mean pool → 1 vector/patient).
+    Compute UMAP and patient-patient correlation matrix.
+    Expected result: 3 clusters by anatomical site (OPX / LAR / OC)
+    and a block-diagonal heatmap.
+
+# Encoder whose embeddings to use. One of: clip-vitb16 | conch | uni2h
+encoder: clip-vitb16
+
+inputs:
+  # Pre-computed patch embeddings (all patches, provided by user).
+  # Shape: (N_patches, dim), float32, row-aligned to manifest_path.
+  embeddings_path: data/embeddings/clip-vitb16/patch_embeddings.npy
+
+  # Patch manifest produced by the tiling pipeline.
+  manifest_path: data/patches/manifest.parquet
+
+  # HANCOCK clinical metadata CSV: must contain one row per patient with
+  # columns for patient/slide ID and primary anatomical site.
+  clinical_metadata: data/raw/hancock_clinical.csv
+
+  # Column in the clinical CSV that matches manifest.slide_id.
+  # Adjust to the real column name after downloading the dataset.
+  slide_id_col: patient_id
+
+  # Column in the clinical CSV containing the anatomical site label
+  # (values expected: oropharynx / larynx / oral_cavity or similar).
+  site_col: primary_site
+
+params:
+  aggregation: mean
+  umap:
+    n_neighbors: 15
+    min_dist: 0.1
+    random_state: 42
+
+outputs:
+  dir: hypotheses/H2_patient_correlation/exp01_site_clustering/outputs/

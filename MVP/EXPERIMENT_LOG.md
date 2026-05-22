@@ -1,8 +1,8 @@
-# Experiment Log — HistoRAG
+# Experiment Log — HistoRAG MVP
 
 Human-readable narrative for each experiment run.
-Machine-readable data lives in `experiments/experiments.csv`.
-Config snapshots live in `configs/runs/<uid>.yaml`.
+Machine-readable data lives in `MVP/results/experiments.csv`.
+Config snapshots live in `MVP/configs/runs/<uid>.yaml`.
 
 ---
 
@@ -39,5 +39,5 @@ Encoding on CPU (~114 s); CUDA build installed in parallel — expect ~10× spee
 
 **Observation**: Results are stable across seeds (SD < 0.011 on all metrics). The headline top-5 (99.4%) is near-ceiling but misleading — with only 2 label classes the random top-5 baseline is already 96.9%, leaving ~2.5 pp of real headroom. The informative metrics are **top-1 = 89.2%** and **mAP@10 = 89.4%**, which measure single-retrieval precision and ranking quality. Seed 2024 shows a small top-1 dip (0.877 vs 0.900), likely due to query set sampling variance; this will stabilize once Phase 1 adds more slides and label diversity.
 
-**Config**: `configs/runs/20260421_00{2,3,4}_clip-vitb16_faiss-flatip_hancock5_seed{42,123,2024}.yaml`  
+**Config**: `MVP/configs/runs/20260421_00{2,3,4}_clip-vitb16_faiss-flatip_hancock5_seed{42,123,2024}.yaml`  
 **UIDs**: `20260421_00{2,3,4}_clip-vitb16_faiss-flatip_hancock5_seed{42,123,2024}`

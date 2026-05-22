@@ -14,3 +14,6 @@ tqdm
 scikit-learn
 huggingface_hub
 pytest
+# H1 / H2 analysis dependencies
+umap-learn
+matplotlib

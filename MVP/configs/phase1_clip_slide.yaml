@@ -1,0 +1,52 @@
+# HistoRAG Phase 1 — CLIP ViT-B/16, slide-level retrieval (baseline)
+# Encoder: CLIP ViT-B/16 (general-purpose vision-language, OpenAI)
+# Eval:    slide-level — patch embeddings mean-pooled to one vector per patient
+
+run:
+  name: phase1_clip_slide
+  seed: 42
+  out_dir: MVP/results/
+  device: auto
+
+data:
+  dataset: hancock_wsi        # update with actual WSI dataset identifier
+  raw_dir: data/raw
+  slide_ids: []               # fill in when WSIs arrive from course
+  label_source: slide_level
+  label_map: MVP/configs/label_map.json
+
+tiling:
+  magnification: 20
+  patch_size: 256
+  stride: 256
+  tissue_filter:
+    method: otsu_hsv
+    thumb_downsample: 32
+    min_tissue_frac: 0.3
+  max_patches_per_slide: 5000
+  patches_dir: data/patches
+
+encoder:
+  name: clip-vitb16
+  model_id: ViT-B-16
+  pretrained: openai
+  batch_size: 32
+  output_dim: 512
+  # Set this to load embeddings encoded on the FAU lab machine instead of re-encoding locally.
+  # Example: precomputed_embeddings_path: data/lab_exports/clip_embeddings.npy
+  precomputed_embeddings_path: null
+
+index:
+  name: faiss-flatip
+  normalize: true
+  save_path: data/indexes/phase1_clip_slide.faiss
+
+eval:
+  level: slide                # "slide" triggers Phase 1 slide-level evaluation
+  aggregation: mean           # mean pooling of patch embeddings per slide
+  query_gallery_split:
+    method: stratified_by_label
+    query_frac: 0.2
+  k_values: [1, 5, 10]
+  compute_map_at: 10
+  random_baseline: true

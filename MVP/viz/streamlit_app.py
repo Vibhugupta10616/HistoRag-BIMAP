@@ -1,15 +1,22 @@
 """HistoRAG Streamlit demo — versioned histopathology retrieval interface.
 
-Run:
-    streamlit run histoRAG/viz/streamlit_app.py
+Run (from repo root):
+    streamlit run MVP/viz/streamlit_app.py
 
-Phases are defined in histoRAG/viz/versions.py.  Switch phases via the sidebar
+Phases are defined in MVP/viz/versions.py.  Switch phases via the sidebar
 dropdown; each phase loads its own encoder, FAISS index, and embeddings.
 """
 from __future__ import annotations
 
-import random as _random
+import sys
 from pathlib import Path
+
+# Ensure repo root is on sys.path so `import histoRAG` works.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+import random as _random
 
 import numpy as np
 import pandas as pd
@@ -17,9 +24,9 @@ import streamlit as st
 from PIL import Image
 
 from histoRAG.embed import ClipEncoder, FaissFlatIP
-from histoRAG.viz.versions import PHASES
+from versions import PHASES
 
-# Repo root — two levels above histoRAG/viz/
+# Repo root — two levels above MVP/viz/
 ROOT = Path(__file__).resolve().parents[2]
 
 # ── Page config (must be first Streamlit call) ────────────────────────────────
@@ -189,7 +196,7 @@ def _load_embeddings(phase_key: str) -> tuple[np.ndarray, np.ndarray]:
 
 @st.cache_data
 def _load_metrics(phase_key: str) -> pd.DataFrame:
-    csv_path = ROOT / "experiments" / "experiments.csv"
+    csv_path = ROOT / "MVP" / "results" / "experiments.csv"
     if not csv_path.exists():
         return pd.DataFrame()
     df   = pd.read_csv(csv_path)

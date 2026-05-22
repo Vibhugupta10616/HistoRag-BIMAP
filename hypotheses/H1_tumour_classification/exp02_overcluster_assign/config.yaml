@@ -1,0 +1,30 @@
+experiment:
+  name: H1_exp02_overcluster_assign
+  hypothesis: H1
+  description: >
+    Unsupervised tumour grouping — K-means k=8 (over-cluster then assign).
+    Tests whether tumour signal is present in the encoder's embedding space even
+    when tumour is NOT the dominant axis of variation. Over-clustering lets tumour
+    patches form their own sub-cluster even if stain/tissue-type dominates the
+    top split. Each cluster is labelled tumour/other by majority vote.
+
+# Encoder whose embeddings to use. One of: clip-vitb16 | conch | uni2h
+encoder: clip-vitb16
+
+inputs:
+  # Pre-computed patch embeddings (provided by user).
+  # Shape: (N_patches, dim), float32, row-aligned to manifest_path.
+  embeddings_path: data/embeddings/clip-vitb16/patch_embeddings.npy
+
+  # Patch manifest produced by the tiling pipeline.
+  manifest_path: data/patches/manifest.parquet
+
+  # Directory containing one <slide_id>.geojson per slide (QuPath tumour annotations).
+  geojson_dir: data/raw/annotations/
+
+params:
+  n_clusters: 8        # k=8: over-cluster to recover buried tumour signal
+  random_state: 42
+
+outputs:
+  dir: hypotheses/H1_tumour_classification/exp02_overcluster_assign/outputs/

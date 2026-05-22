@@ -1,0 +1,42 @@
+experiment:
+  name: H2_exp02_tumour_similarity
+  hypothesis: H2
+  question: Q2
+  description: >
+    Filter to tumour patches only (from .geojson annotations).
+    UMAP on individual tumour patches — expected: all sites mixed.
+    Correlation matrix (adaptive aggregation) — expected: uniformly high similarity
+    showing shared cancer histopathology across anatomical sites.
+
+# Encoder whose embeddings to use. One of: clip-vitb16 | conch | uni2h
+encoder: clip-vitb16
+
+inputs:
+  # Pre-computed patch embeddings (all patches, provided by user).
+  # Shape: (N_patches, dim), float32, row-aligned to manifest_path.
+  embeddings_path: data/embeddings/clip-vitb16/patch_embeddings.npy
+
+  # Patch manifest produced by the tiling pipeline.
+  manifest_path: data/patches/manifest.parquet
+
+  # Directory containing one <slide_id>.geojson per slide (QuPath tumour annotations).
+  geojson_dir: data/raw/annotations/
+
+  # HANCOCK clinical metadata (for site labels used in UMAP colouring).
+  clinical_metadata: data/raw/hancock_clinical.csv
+  slide_id_col: patient_id
+  site_col: primary_site
+
+params:
+  umap:
+    n_neighbors: 15
+    min_dist: 0.1
+    random_state: 42
+
+  # Adaptive aggregation threshold (see histoRAG/correlate.py → decide_aggregation).
+  # If median tumour patches/patient >= threshold → aggregate per patient.
+  # If median < threshold → keep individual patches.
+  aggregation_threshold: 20
+
+outputs:
+  dir: hypotheses/H2_patient_correlation/exp02_tumour_similarity/outputs/

@@ -1,4 +1,4 @@
-"""CLIP ViT-B/16 encoder and FAISS flat index for patch embedding and retrieval."""
+"""Patch encoders (CLIP, CONCH, UNI2-h), FAISS index, and slide-level aggregation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,16 +6,24 @@ from pathlib import Path
 import faiss
 import numpy as np
 import open_clip
+import pandas as pd
 import torch
 from PIL import Image
 from tqdm import tqdm
 
 
+# ---------------------------------------------------------------------------
+# Encoders
+# ---------------------------------------------------------------------------
+
 class ClipEncoder:
-    """Encodes image patches using CLIP ViT-B/16 (OpenAI weights).
+    """Encodes patches using CLIP ViT-B/16 (OpenAI weights).
 
     Returns L2-normalized 512-d float32 vectors so that inner product == cosine similarity.
     """
+
+    name = "clip-vitb16"
+    output_dim = 512
 
     def __init__(self, model_id: str = "ViT-B-16", pretrained: str = "openai", device: str = "auto") -> None:
         if device == "auto":
@@ -36,10 +44,129 @@ class ClipEncoder:
     def encode_batched(self, images: list[Image.Image], batch_size: int = 32) -> np.ndarray:
         """Encode a large list of images in batches with a progress bar."""
         parts = []
-        for i in tqdm(range(0, len(images), batch_size), desc="Encoding"):
+        for i in tqdm(range(0, len(images), batch_size), desc=f"Encoding ({self.name})"):
             parts.append(self.encode(images[i : i + batch_size]))
         return np.concatenate(parts, axis=0)
 
+
+class CONCHEncoder:
+    """Encodes patches using CONCH (histopathology vision-language, MahmoodLab).
+
+    Returns L2-normalized 512-d float32 vectors.
+
+    Installation:
+        pip install git+https://github.com/mahmoodlab/CONCH
+    HuggingFace:
+        MahmoodLab/conch — may require a HuggingFace access request.
+        Run `huggingface-cli login` before first use.
+    """
+
+    name = "conch"
+    output_dim = 512
+
+    def __init__(self, device: str = "auto") -> None:
+        try:
+            from conch.open_clip_custom import create_model_from_pretrained
+        except ImportError as e:
+            raise ImportError(
+                "CONCH not installed. Run: pip install git+https://github.com/mahmoodlab/CONCH"
+            ) from e
+
+        if device == "auto":
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = device
+
+        model, preprocess = create_model_from_pretrained("conch_ViT-B-16", "hf_hub:MahmoodLab/conch")
+        self._model = model.to(device).eval()
+        self._preprocess = preprocess
+
+    @torch.inference_mode()
+    def encode(self, images: list[Image.Image]) -> np.ndarray:
+        """Encode a list of PIL images → (N, 512) L2-normalized float32 array."""
+        tensors = torch.stack([self._preprocess(img) for img in images]).to(self.device)
+        # CONCH's encode_image returns normalized features when normalize=True
+        features = self._model.encode_image(tensors, normalize=True)
+        return features.cpu().float().numpy()
+
+    def encode_batched(self, images: list[Image.Image], batch_size: int = 32) -> np.ndarray:
+        """Encode a large list of images in batches with a progress bar."""
+        parts = []
+        for i in tqdm(range(0, len(images), batch_size), desc=f"Encoding ({self.name})"):
+            parts.append(self.encode(images[i : i + batch_size]))
+        return np.concatenate(parts, axis=0)
+
+
+class UNIEncoder:
+    """Encodes patches using UNI2-h (histopathology vision-only SSL, MahmoodLab).
+
+    Returns L2-normalized 1536-d float32 vectors.
+
+    Requirements:
+        pip install timm
+        huggingface-cli login  (MahmoodLab/UNI2-h access required)
+    Hardware note:
+        ViT-H/14 requires ~10-14 GB VRAM at batch=32.
+        Reduce batch_size or use device="cpu" if OOM on local GPU.
+    """
+
+    name = "uni2h"
+    output_dim = 1536
+
+    def __init__(self, device: str = "auto") -> None:
+        try:
+            import timm
+            from timm.data import create_transform, resolve_model_data_config
+        except ImportError as e:
+            raise ImportError("timm not installed. Run: pip install timm") from e
+
+        if device == "auto":
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = device
+
+        model = timm.create_model(
+            "hf-hub:MahmoodLab/UNI2-h",
+            pretrained=True,
+            init_values=1e-5,       # required by UNI2-h LayerScale initialization
+            dynamic_img_size=True,  # allows non-square inputs at inference
+        )
+        self._model = model.to(device).eval()
+        data_cfg = resolve_model_data_config(self._model)
+        self._preprocess = create_transform(**data_cfg, is_training=False)
+
+    @torch.inference_mode()
+    def encode(self, images: list[Image.Image]) -> np.ndarray:
+        """Encode a list of PIL images → (N, 1536) L2-normalized float32 array."""
+        tensors = torch.stack([self._preprocess(img) for img in images]).to(self.device)
+        features = self._model(tensors)
+        features = features / features.norm(dim=-1, keepdim=True)
+        return features.cpu().float().numpy()
+
+    def encode_batched(self, images: list[Image.Image], batch_size: int = 32) -> np.ndarray:
+        """Encode a large list of images in batches with a progress bar."""
+        parts = []
+        for i in tqdm(range(0, len(images), batch_size), desc=f"Encoding ({self.name})"):
+            parts.append(self.encode(images[i : i + batch_size]))
+        return np.concatenate(parts, axis=0)
+
+
+# Registry: config name → encoder class
+ENCODERS: dict[str, type] = {
+    "clip-vitb16": ClipEncoder,
+    "conch": CONCHEncoder,
+    "uni2h": UNIEncoder,
+}
+
+
+def get_encoder(name: str, device: str = "auto"):
+    """Instantiate an encoder by its config name (e.g. 'clip-vitb16', 'conch', 'uni2h')."""
+    if name not in ENCODERS:
+        raise ValueError(f"Unknown encoder '{name}'. Available: {sorted(ENCODERS)}")
+    return ENCODERS[name](device=device)
+
+
+# ---------------------------------------------------------------------------
+# FAISS index
+# ---------------------------------------------------------------------------
 
 class FaissFlatIP:
     """Exact cosine similarity search using FAISS IndexFlatIP.
@@ -76,3 +203,48 @@ class FaissFlatIP:
     @property
     def ntotal(self) -> int:
         return self._index.ntotal
+
+
+# ---------------------------------------------------------------------------
+# Slide-level aggregation
+# ---------------------------------------------------------------------------
+
+def aggregate_slide_embeddings(
+    manifest: pd.DataFrame,
+    embeddings: np.ndarray,
+    method: str = "mean",
+) -> tuple[np.ndarray, list[str]]:
+    """Aggregate patch embeddings into one vector per slide via mean pooling.
+
+    Mean pooling implicitly encodes tissue composition: a slide with mostly
+    tumor-like patches produces a vector close to the 'tumor region' of the
+    embedding space. Spatial arrangement is NOT preserved — that is a Phase 2
+    extension (attention-weighted aggregation / graph models).
+
+    Args:
+        manifest:   Patch manifest DataFrame with a 'slide_id' column.
+                    Row order must match the rows of `embeddings`.
+        embeddings: (N_patches, dim) float32 array of L2-normalized patch vectors.
+        method:     Aggregation method — only "mean" is implemented for Phase 1.
+
+    Returns:
+        slide_embeddings: (N_slides, dim) float32 array, L2-re-normalized after pooling.
+        slide_ids:        List of slide_id strings in the same row order.
+    """
+    if method != "mean":
+        raise NotImplementedError(f"Aggregation '{method}' not implemented. Use 'mean'.")
+
+    # Preserve the order slides first appear in the manifest
+    slide_ids = list(dict.fromkeys(manifest["slide_id"].tolist()))
+    slide_id_array = manifest["slide_id"].to_numpy()
+
+    slide_vecs = []
+    for sid in slide_ids:
+        mask = slide_id_array == sid
+        mean_vec = embeddings[mask].mean(axis=0)
+        # Re-normalize: mean of unit vectors is not necessarily unit length
+        norm = np.linalg.norm(mean_vec)
+        slide_vecs.append(mean_vec / norm if norm > 0 else mean_vec)
+
+    slide_embeddings = np.stack(slide_vecs, axis=0).astype(np.float32)
+    return slide_embeddings, slide_ids

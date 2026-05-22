@@ -50,6 +50,10 @@ Thumbs.db
 # Utility scripts (local preprocessing, not part of pipeline)
 svs_to_png/
 
+# Hypothesis experiment outputs (plots re-generated on each run)
+hypotheses/**/outputs/*.png
+hypotheses/**/outputs/*.npy
+
 # Streamlit runtime logs
 streamlit_out.txt
 streamlit_err.txt
