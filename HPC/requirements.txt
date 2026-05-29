@@ -1,0 +1,32 @@
+# HPC-only dependencies for HistoRAG embedding pipeline
+# Run on FAU TinyGPU / Alex clusters
+#
+# Setup:
+#   module load python
+#   python -m venv ~/HistoRag-BIMAP/HPC/hpcenv
+#   source ~/HistoRag-BIMAP/HPC/hpcenv/bin/activate
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+#   pip install -r ~/HistoRag-BIMAP/HPC/requirements.txt
+
+# --- Deep learning ---
+# torch + torchvision installed separately above (CUDA version varies per cluster)
+open_clip_torch==3.3.0
+
+# --- CONCH encoder (optional, needed for --encoder conch) ---
+# Install manually after the above:
+#   pip install git+https://github.com/mahmoodlab/CONCH
+#   huggingface-cli login     (request access at hf.co/MahmoodLab/conch first)
+
+# --- WSI processing ---
+openslide-bin==4.0.0.13
+openslide-python==1.4.3
+Pillow==12.2.0
+
+# --- Data ---
+numpy==2.4.4
+pandas==3.0.2
+pyarrow==23.0.1
+h5py==3.14.0
+
+# --- Utilities ---
+tqdm==4.67.3

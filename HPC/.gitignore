@@ -1,0 +1,18 @@
+# HPC venv
+hpcenv/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Ignore everything outside HPC/ that lives on disk from main branch
+/.claude/
+/bimap/
+/data/
+/graphify-out/
+/histoRAG/
+/hypotheses/
+/svs_to_png/
+/tests/
+/abcd.txt
+/def.pz
