@@ -45,6 +45,7 @@ Thumbs.db
 
 # Claude / code-review tooling
 .claude/
+CLAUDE.md
 .code-review-graph/
 
 # Utility scripts (local preprocessing, not part of pipeline)
