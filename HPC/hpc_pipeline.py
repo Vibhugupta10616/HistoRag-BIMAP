@@ -8,31 +8,39 @@ Supports CLIP and CONCH encoders via --encoder flag.
 Run once per encoder — tiling is shared and computed only once.
 
 Usage (from HPC/ directory, after activating HPC/hpcenv):
-    # CLIP embeddings
+    # CLIP embeddings for Larynx
     python hpc_pipeline.py \
-        --wsi_dir     $WORK/hancock/wsi \
+        --wsi_dir     $WORK/hancock/larynx/wsi \
         --out_dir     $WORK/hancock/embeddings \
-        --patches_dir $WORK/hancock/patches \
-        --encoder     clip
+        --patches_dir $WORK/hancock/larynx/patches \
+        --encoder     clip \
+        --tissue      Larynx
 
-    # CONCH embeddings (run after: pip install git+https://github.com/mahmoodlab/CONCH)
+    # CONCH embeddings for Hypopharynx
     python hpc_pipeline.py \
-        --wsi_dir     $WORK/hancock/wsi \
+        --wsi_dir     $WORK/hancock/hypopharynx/wsi \
         --out_dir     $WORK/hancock/embeddings \
-        --patches_dir $WORK/hancock/patches \
-        --encoder     conch
+        --patches_dir $WORK/hancock/hypopharynx/patches \
+        --encoder     conch \
+        --tissue      Hypopharynx
 
 Output structure:
     $out_dir/
-      manifest.parquet                          shared across encoders
-      per_slide/
-        {slide_id}/
-          clip/
-            embeddings.h5                       CLIP patch embeddings
-          conch/
-            embeddings.h5                       CONCH patch embeddings
+      CLIP/
+        Primary_Tumour/
+          Larynx/
+            h5_files/
+              PrimaryTumor_HE_{slide_id}.h5
+          Hypopharynx/
+            h5_files/
+              PrimaryTumor_HE_{slide_id}.h5
+      CONCH/
+        Primary_Tumour/
+          Larynx/
+            h5_files/
+              PrimaryTumor_HE_{slide_id}.h5
 
-Each embeddings.h5 contains:
+Each .h5 file contains:
     embeddings  (N_patches, 512) float32   L2-normalised vectors
     patch_ids   (N_patches,)     bytes     unique patch identifier
     x           (N_patches,)     int32     top-left x in level-0 pixels
@@ -40,13 +48,15 @@ Each embeddings.h5 contains:
 
 Reading locally:
     import h5py, numpy as np
-    with h5py.File("per_slide/patient_001/clip/embeddings.h5", "r") as f:
+    with h5py.File("CLIP/Primary_Tumour/Larynx/h5_files/PrimaryTumor_HE_slide001.h5", "r") as f:
         emb = f["embeddings"][:]   # (N, 512)
         x, y = f["x"][:], f["y"][:]
 """
 from __future__ import annotations
 
 import argparse
+import multiprocessing as mp
+import os
 import sys
 import time
 from pathlib import Path
@@ -65,6 +75,9 @@ from wsi_tiler import Tiler, WSI
 
 _WSI_EXTENSIONS = [".svs", ".tiff", ".tif", ".ndpi", ".mrxs", ".scn"]
 
+# Map CLI encoder name -> folder name used in output path
+_ENCODER_DIR = {"clip": "CLIP", "conch": "CONCH"}
+
 
 def discover_slides(wsi_dir: Path) -> list[Path]:
     """Return all WSI files found recursively under wsi_dir, sorted by name."""
@@ -75,15 +88,43 @@ def discover_slides(wsi_dir: Path) -> list[Path]:
     return found
 
 
+def _tile_worker(args: tuple) -> list[dict]:
+    """Tile a single slide in a subprocess. Must be top-level for pickling."""
+    slide_path, slide_id, patches_dir, max_patches, tissue, hpc_dir = args
+
+    # Re-insert HPC/ path since this runs in a fresh subprocess
+    sys.path.insert(0, hpc_dir)
+    from wsi_tiler import Tiler, WSI  # noqa: PLC0415
+
+    tiler = Tiler(
+        patch_size=256,
+        stride=256,
+        target_magnification=20.0,
+        thumb_downsample=32,
+        min_tissue_frac=0.01,  # discard only pure-white patches
+        max_patches_per_slide=max_patches,
+        seed=42,
+    )
+    try:
+        with WSI(Path(slide_path)) as wsi:
+            rows = tiler.extract(wsi, slide_id=slide_id, out_dir=Path(patches_dir), label=tissue)
+        print(f"  [done] {slide_id}: {len(rows)} patches", flush=True)
+        return rows
+    except Exception as exc:
+        print(f"  [skip] {slide_id} failed: {exc}", flush=True)
+        return []
+
+
 def tile_all(
     slide_files: list[Path],
     patches_dir: Path,
     max_patches: int,
-    label: str,
+    tissue: str,
+    num_workers: int,
 ) -> pd.DataFrame:
-    """Tile every slide and return the combined patch manifest.
+    """Tile every slide in parallel and return the combined patch manifest.
 
-    Saves manifest after every slide — safe to resume after a crash.
+    Saves manifest after each completed slide — safe to resume after a crash.
     """
     manifest_path = patches_dir / "manifest.parquet"
 
@@ -96,30 +137,25 @@ def tile_all(
     else:
         all_rows = []
 
-    tiler = Tiler(
-        patch_size=256,
-        stride=256,
-        target_magnification=20.0,
-        thumb_downsample=32,
-        min_tissue_frac=0.01,  # discard only pure-white patches
-        max_patches_per_slide=max_patches,
-        seed=42,
-    )
+    remaining = [p for p in slide_files if p.stem not in already_done]
+    if not remaining:
+        print("All slides already tiled.")
+        return pd.DataFrame(all_rows)
 
-    for slide_path in slide_files:
-        slide_id = slide_path.stem
-        if slide_id in already_done:
-            continue
+    hpc_dir = str(Path(__file__).resolve().parent)
+    worker_args = [
+        (str(p), p.stem, str(patches_dir), max_patches, tissue, hpc_dir)
+        for p in remaining
+    ]
 
-        print(f"\nTiling {slide_id} ...")
-        try:
-            with WSI(slide_path) as wsi:
-                rows = tiler.extract(wsi, slide_id=slide_id, out_dir=patches_dir, label=label)
-            print(f"  -> {len(rows)} patches")
-            all_rows.extend(rows)
-            pd.DataFrame(all_rows).to_parquet(manifest_path, index=False)
-        except Exception as exc:
-            print(f"  WARNING: {slide_id} failed ({exc}), skipping.")
+    print(f"Tiling {len(remaining)} slides with {num_workers} workers ...\n")
+
+    # imap_unordered returns results as each worker finishes — saves incrementally
+    with mp.Pool(processes=num_workers) as pool:
+        for rows in pool.imap_unordered(_tile_worker, worker_args):
+            if rows:
+                all_rows.extend(rows)
+                pd.DataFrame(all_rows).to_parquet(manifest_path, index=False)
 
     manifest = pd.DataFrame(all_rows)
     print(f"\nTiling complete: {len(manifest)} patches across {manifest['slide_id'].nunique()} slides")
@@ -130,18 +166,23 @@ def embed_and_save_per_slide(
     manifest: pd.DataFrame,
     out_dir: Path,
     encoder_name: str,
+    tissue: str,
     batch_size: int,
 ) -> None:
-    """Encode all patches and save one HDF5 per patient under the encoder subfolder.
+    """Encode all patches and save one HDF5 per slide.
 
-    Output: out_dir/per_slide/{slide_id}/{encoder_name}/embeddings.h5
+    Output: out_dir/{ENCODER}/Primary_Tumour/{tissue}/h5_files/PrimaryTumor_HE_{slide_id}.h5
     Skips slides whose HDF5 already exists — safe to resume after a crash.
     """
+    encoder_dir = _ENCODER_DIR[encoder_name]
+    h5_dir = out_dir / encoder_dir / "Primary_Tumour" / tissue / "h5_files"
+    h5_dir.mkdir(parents=True, exist_ok=True)
+
     slide_ids = list(manifest["slide_id"].unique())
 
     already_done = {
         s for s in slide_ids
-        if (out_dir / "per_slide" / s / encoder_name / "embeddings.h5").exists()
+        if (h5_dir / f"PrimaryTumor_HE_{s}.h5").exists()
     }
     remaining = [s for s in slide_ids if s not in already_done]
 
@@ -158,7 +199,7 @@ def embed_and_save_per_slide(
 
     for slide_id in remaining:
         slide_rows = manifest[manifest["slide_id"] == slide_id].reset_index(drop=True)
-        print(f"\nEmbedding {slide_id}  ({len(slide_rows)} patches)  [{encoder_name}] ...")
+        print(f"\nEmbedding {slide_id}  ({len(slide_rows)} patches)  [{encoder_dir}] ...")
 
         images = [
             Image.open(p).convert("RGB")
@@ -169,9 +210,7 @@ def embed_and_save_per_slide(
         embeddings = encoder.encode_batched(images, batch_size=batch_size)
         elapsed = time.time() - t0
 
-        slide_dir = out_dir / "per_slide" / slide_id / encoder_name
-        slide_dir.mkdir(parents=True, exist_ok=True)
-        h5_path = slide_dir / "embeddings.h5"
+        h5_path = h5_dir / f"PrimaryTumor_HE_{slide_id}.h5"
 
         with h5py.File(h5_path, "w") as f:
             f.create_dataset("embeddings", data=embeddings, compression="gzip", compression_opts=4)
@@ -179,36 +218,40 @@ def embed_and_save_per_slide(
             f.create_dataset("x",          data=slide_rows["x"].to_numpy(dtype=np.int32))
             f.create_dataset("y",          data=slide_rows["y"].to_numpy(dtype=np.int32))
             f.attrs["slide_id"]    = slide_id
-            f.attrs["encoder"]     = encoder_name
+            f.attrs["encoder"]     = encoder_dir
+            f.attrs["tissue"]      = tissue
             f.attrs["n_patches"]   = len(slide_rows)
             f.attrs["dim"]         = embeddings.shape[1]
 
         print(f"  -> {h5_path}  shape={embeddings.shape}  ({elapsed:.0f}s, {len(slide_rows)/elapsed:.0f} p/s)")
 
     print(f"\nAll slides embedded in {time.time() - t_total:.0f}s")
-    print(f"Output: {out_dir / 'per_slide'}")
+    print(f"Output: {h5_dir}")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="HistoRAG HPC pipeline — CLIP patch embedding")
+    parser = argparse.ArgumentParser(description="HistoRAG HPC pipeline — patch embedding")
     parser.add_argument("--wsi_dir",     required=True, help="Directory containing extracted WSI files")
-    parser.add_argument("--out_dir",     required=True, help="Output directory for embeddings")
+    parser.add_argument("--out_dir",     required=True, help="Root embeddings output directory ($WORK/hancock/embeddings)")
     parser.add_argument("--patches_dir", required=True, help="Directory to save patch PNG files")
     parser.add_argument("--encoder",     default="clip", choices=["clip", "conch"], help="Encoder to use")
-    parser.add_argument("--label",       default="larynx", help="Label applied to all slides (e.g. larynx)")
+    parser.add_argument("--tissue",      default="Larynx", help="Tissue name for output path (e.g. Larynx, Hypopharynx)")
     parser.add_argument("--max_patches", type=int, default=5000, help="Max patches sampled per slide")
-    parser.add_argument("--batch_size",  type=int, default=64,   help="Encoding batch size")
+    parser.add_argument("--batch_size",  type=int, default=256,  help="Encoding batch size")
+    parser.add_argument("--num_workers", type=int, default=None, help="Parallel tiling workers (default: CPU count - 2)")
     args = parser.parse_args()
 
     wsi_dir     = Path(args.wsi_dir)
     out_dir     = Path(args.out_dir)
     patches_dir = Path(args.patches_dir)
+    num_workers = args.num_workers or max(1, (os.cpu_count() or 4) - 2)
 
     print(f"\n{'='*60}")
-    print(f"HistoRAG HPC Pipeline  |  encoder={args.encoder}")
+    print(f"HistoRAG HPC Pipeline  |  encoder={args.encoder.upper()}  tissue={args.tissue}")
     print(f"  WSI dir    : {wsi_dir}")
     print(f"  Patches    : {patches_dir}")
-    print(f"  Output     : {out_dir}")
+    print(f"  Output     : {out_dir / _ENCODER_DIR[args.encoder] / 'Primary_Tumour' / args.tissue / 'h5_files'}")
+    print(f"  Workers    : {num_workers}")
     print(f"{'='*60}\n")
 
     slides = discover_slides(wsi_dir)
@@ -216,8 +259,8 @@ def main() -> None:
         raise RuntimeError(f"No WSI files found in {wsi_dir}. Check that extraction completed.")
     print(f"Discovered {len(slides)} slides\n")
 
-    manifest = tile_all(slides, patches_dir, args.max_patches, args.label)
-    embed_and_save_per_slide(manifest, out_dir, args.encoder, args.batch_size)
+    manifest = tile_all(slides, patches_dir, args.max_patches, args.tissue, num_workers)
+    embed_and_save_per_slide(manifest, out_dir, args.encoder, args.tissue, args.batch_size)
 
     print("\nPipeline complete.")
 
