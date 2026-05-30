@@ -67,7 +67,6 @@ python "$HPC_DIR/hpc_pipeline.py" \
     --patches_dir "$PATCHES_DIR" \
     --tissue      "$TISSUE" \
     --encoder     "$ENCODER" \
-    --max_patches 5000 \
     --batch_size  256
 
 # --- Step 5: Zip embeddings for local download ---

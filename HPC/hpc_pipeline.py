@@ -236,7 +236,7 @@ def main() -> None:
     parser.add_argument("--patches_dir", required=True, help="Directory to save patch PNG files")
     parser.add_argument("--encoder",     default="clip", choices=["clip", "conch"], help="Encoder to use")
     parser.add_argument("--tissue",      default="Larynx", help="Tissue name for output path (e.g. Larynx, Hypopharynx)")
-    parser.add_argument("--max_patches", type=int, default=5000, help="Max patches sampled per slide")
+    parser.add_argument("--max_patches", type=int, default=None, help="Max patches sampled per slide (default: no limit)")
     parser.add_argument("--batch_size",  type=int, default=256,  help="Encoding batch size")
     parser.add_argument("--num_workers", type=int, default=None, help="Parallel tiling workers (default: CPU count - 2)")
     args = parser.parse_args()
