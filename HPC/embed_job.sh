@@ -44,11 +44,15 @@ log "Output   : $OUT_DIR"
 log "Loading Python module ..."
 module load python/pytorch2.6py3.12
 
-# --- Step 2: Extract zip ---
-log "Extracting $ZIP ..."
+# --- Step 2: Extract zip (skip if WSI files already exist) ---
 mkdir -p "$WSI_DIR"
-unzip -o "$ZIP" -d "$WSI_DIR"
-log "Extraction complete — $(ls "$WSI_DIR" | wc -l) files"
+if [ -n "$(ls -A "$WSI_DIR" 2>/dev/null)" ]; then
+    log "WSI files already extracted ($(ls "$WSI_DIR" | wc -l) files), skipping unzip."
+else
+    log "Extracting $ZIP ..."
+    unzip -o "$ZIP" -d "$WSI_DIR"
+    log "Extraction complete — $(ls "$WSI_DIR" | wc -l) files"
+fi
 
 # --- Step 3: Activate venv ---
 log "Activating virtualenv ..."
