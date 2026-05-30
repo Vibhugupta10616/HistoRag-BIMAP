@@ -254,12 +254,19 @@ def main() -> None:
     print(f"  Workers    : {num_workers}")
     print(f"{'='*60}\n")
 
-    slides = discover_slides(wsi_dir)
-    if not slides:
-        raise RuntimeError(f"No WSI files found in {wsi_dir}. Check that extraction completed.")
-    print(f"Discovered {len(slides)} slides\n")
+    manifest_path = patches_dir / "manifest.parquet"
+    if manifest_path.exists():
+        # Tiling already done — load manifest directly, no WSI files needed
+        print(f"Manifest found — skipping tiling, loading from {manifest_path}")
+        manifest = pd.read_parquet(manifest_path)
+        print(f"Loaded {len(manifest)} patches across {manifest['slide_id'].nunique()} slides\n")
+    else:
+        slides = discover_slides(wsi_dir)
+        if not slides:
+            raise RuntimeError(f"No WSI files found in {wsi_dir}. Check that extraction completed.")
+        print(f"Discovered {len(slides)} slides\n")
+        manifest = tile_all(slides, patches_dir, args.max_patches, args.tissue, num_workers)
 
-    manifest = tile_all(slides, patches_dir, args.max_patches, args.tissue, num_workers)
     embed_and_save_per_slide(manifest, out_dir, args.encoder, args.tissue, args.batch_size)
 
     print("\nPipeline complete.")
