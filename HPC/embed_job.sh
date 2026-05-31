@@ -25,13 +25,8 @@ WSI_DIR="$WORK/hancock/$TISSUE_LOWER/wsi"
 PATCHES_DIR="$WORK/hancock/$TISSUE_LOWER/patches"
 OUT_DIR="$WORK/hancock/embeddings"
 
-# Larynx zip is under hancock/zips/ (downloaded before tissue-specific structure).
-# All other tissues have their zip under hancock/{tissue}/zips/.
-if [ "$TISSUE" = "Larynx" ]; then
-    ZIP="$WORK/hancock/zips/WSI_PrimaryTumor_Larynx.zip"
-else
-    ZIP=$(find "$WORK/hancock/$TISSUE_LOWER/zips/" -name "*.zip" | head -1)
-fi
+# All tissues: zip lives under hancock/{tissue}/zips/
+ZIP=$(find "$WORK/hancock/$TISSUE_LOWER/zips/" -name "*.zip" | head -1)
 
 log "Tissue   : $TISSUE"
 log "Encoder  : $ENCODER"

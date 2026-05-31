@@ -30,15 +30,16 @@ Output structure:
         Primary_Tumour/
           Larynx/
             h5_files/
-              PrimaryTumor_HE_{slide_id}.h5
+              {slide_id}.h5
+              Larynx_CLIP_embeddings.zip   (created by embed_job.sh for download)
           Hypopharynx/
             h5_files/
-              PrimaryTumor_HE_{slide_id}.h5
+              {slide_id}.h5
       CONCH/
         Primary_Tumour/
           Larynx/
             h5_files/
-              PrimaryTumor_HE_{slide_id}.h5
+              {slide_id}.h5
 
 Each .h5 file contains:
     embeddings  (N_patches, 512) float32   L2-normalised vectors
@@ -48,7 +49,7 @@ Each .h5 file contains:
 
 Reading locally:
     import h5py, numpy as np
-    with h5py.File("CLIP/Primary_Tumour/Larynx/h5_files/PrimaryTumor_HE_slide001.h5", "r") as f:
+    with h5py.File("CLIP/Primary_Tumour/Larynx/h5_files/PrimaryTumor_HE_152.h5", "r") as f:
         emb = f["embeddings"][:]   # (N, 512)
         x, y = f["x"][:], f["y"][:]
 """
