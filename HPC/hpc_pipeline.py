@@ -58,6 +58,7 @@ from __future__ import annotations
 import argparse
 import multiprocessing as mp
 import os
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -230,6 +231,22 @@ def embed_and_save_per_slide(
     print(f"Output: {h5_dir}")
 
 
+def cleanup_wsi_if_patching_complete(manifest: pd.DataFrame, patches_dir: Path, wsi_dir: Path) -> None:
+    """Delete WSI files after verifying all slides have patch directories with PNGs."""
+    slide_ids = list(manifest["slide_id"].unique())
+
+    # Verify every slide has a non-empty patch directory
+    missing = [s for s in slide_ids if not any((patches_dir / s).glob("*.png"))]
+    if missing:
+        print(f"  WARNING: {len(missing)} slides have no patches — skipping WSI deletion.")
+        print(f"  Missing: {missing[:5]}{'...' if len(missing) > 5 else ''}")
+        return
+
+    print(f"  All {len(slide_ids)} slides verified — deleting WSI directory to free disk space ...")
+    shutil.rmtree(wsi_dir, ignore_errors=True)
+    print(f"  Deleted: {wsi_dir}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="HistoRAG HPC pipeline — patch embedding")
     parser.add_argument("--wsi_dir",     required=True, help="Directory containing extracted WSI files")
@@ -267,6 +284,8 @@ def main() -> None:
             raise RuntimeError(f"No WSI files found in {wsi_dir}. Check that extraction completed.")
         print(f"Discovered {len(slides)} slides\n")
         manifest = tile_all(slides, patches_dir, args.max_patches, args.tissue, num_workers)
+        print("\nVerifying patches and cleaning up WSI files ...")
+        cleanup_wsi_if_patching_complete(manifest, patches_dir, wsi_dir)
 
     embed_and_save_per_slide(manifest, out_dir, args.encoder, args.tissue, args.batch_size)
 
