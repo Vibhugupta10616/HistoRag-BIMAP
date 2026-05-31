@@ -69,9 +69,12 @@ python "$HPC_DIR/hpc_pipeline.py" \
     --encoder     "$ENCODER" \
     --batch_size  256
 
-# --- Step 5: Zip embeddings for local download ---
-log "Zipping embeddings ..."
-cd "$WORK/hancock"
-zip -r embeddings.zip embeddings/
-log "Done: $WORK/hancock/embeddings.zip"
-log "Download with: scp tinygpu:$WORK/hancock/embeddings.zip D:/College/Sem_5/HistoRag-BIMAP/data/"
+# --- Step 5: Zip tissue h5 files for local download ---
+ENCODER_UPPER=$(echo "$ENCODER" | tr '[:lower:]' '[:upper:]')
+H5_DIR="$WORK/hancock/embeddings/$ENCODER_UPPER/Primary_Tumour/$TISSUE/h5_files"
+ZIP_OUT="$H5_DIR/${TISSUE}_${ENCODER_UPPER}_embeddings.zip"
+log "Zipping $H5_DIR ..."
+cd "$H5_DIR"
+zip -r "$ZIP_OUT" *.h5
+log "Done: $ZIP_OUT"
+log "Download with: scp tinygpu:$ZIP_OUT D:/College/Sem_5/HistoRag-BIMAP/data/"

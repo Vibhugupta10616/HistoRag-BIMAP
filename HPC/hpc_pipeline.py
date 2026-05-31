@@ -182,7 +182,7 @@ def embed_and_save_per_slide(
 
     already_done = {
         s for s in slide_ids
-        if (h5_dir / f"PrimaryTumor_HE_{s}.h5").exists()
+        if (h5_dir / f"{s}.h5").exists()
     }
     remaining = [s for s in slide_ids if s not in already_done]
 
@@ -210,7 +210,7 @@ def embed_and_save_per_slide(
         embeddings = encoder.encode_batched(images, batch_size=batch_size)
         elapsed = time.time() - t0
 
-        h5_path = h5_dir / f"PrimaryTumor_HE_{slide_id}.h5"
+        h5_path = h5_dir / f"{slide_id}.h5"
 
         with h5py.File(h5_path, "w") as f:
             f.create_dataset("embeddings", data=embeddings, compression="gzip", compression_opts=4)
