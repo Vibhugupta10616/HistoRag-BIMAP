@@ -69,7 +69,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import h5py
 import numpy as np
 import pandas as pd
+import torch
 from PIL import Image
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from encoders import get_encoder
@@ -164,17 +166,33 @@ def tile_all(
     return manifest
 
 
+class PatchDataset(Dataset):
+    """Loads patch PNGs from disk, applies encoder preprocessing transform."""
+
+    def __init__(self, paths: list[str], transform) -> None:
+        self.paths     = paths
+        self.transform = transform
+
+    def __len__(self) -> int:
+        return len(self.paths)
+
+    def __getitem__(self, idx: int):
+        return self.transform(Image.open(self.paths[idx]).convert("RGB"))
+
+
 def embed_and_save_per_slide(
     manifest: pd.DataFrame,
     out_dir: Path,
     encoder_name: str,
     tissue: str,
     batch_size: int,
+    num_workers: int,
 ) -> None:
-    """Encode all patches and save one HDF5 per slide.
+    """Encode all patches via DataLoader and save one HDF5 per slide.
 
-    Output: out_dir/{ENCODER}/Primary_Tumour/{tissue}/h5_files/PrimaryTumor_HE_{slide_id}.h5
+    Output: out_dir/{ENCODER}/Primary_Tumour/{tissue}/h5_files/{slide_id}.h5
     Skips slides whose HDF5 already exists — safe to resume after a crash.
+    DataLoader prefetches batches on CPU while GPU encodes the previous batch.
     """
     encoder_dir = _ENCODER_DIR[encoder_name]
     h5_dir = out_dir / encoder_dir / "Primary_Tumour" / tissue / "h5_files"
@@ -197,33 +215,47 @@ def embed_and_save_per_slide(
     print(f"\nLoading {encoder_name} encoder ...")
     encoder = get_encoder(encoder_name)
 
+    # DataLoader workers for parallel image loading while GPU encodes
+    loader_workers = min(num_workers, 8)
+
     t_total = time.time()
 
     for slide_id in remaining:
         slide_rows = manifest[manifest["slide_id"] == slide_id].reset_index(drop=True)
         print(f"\nEmbedding {slide_id}  ({len(slide_rows)} patches)  [{encoder_dir}] ...")
 
-        images = [
-            Image.open(p).convert("RGB")
-            for p in tqdm(slide_rows["path"], desc="  Loading", leave=False)
-        ]
+        dataset = PatchDataset(slide_rows["path"].tolist(), encoder._preprocess)
+        loader  = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            num_workers=loader_workers,
+            pin_memory=True,
+            prefetch_factor=2,
+        )
 
-        t0 = time.time()
-        embeddings = encoder.encode_batched(images, batch_size=batch_size)
-        elapsed = time.time() - t0
+        t0   = time.time()
+        parts = []
+        with torch.inference_mode():
+            for batch in tqdm(loader, desc="  Encoding", leave=False):
+                batch = batch.to(encoder.device, non_blocking=True)
+                feats = encoder._model.encode_image(batch)
+                feats = feats / feats.norm(dim=-1, keepdim=True)
+                parts.append(feats.cpu().float().numpy())
+
+        embeddings = np.concatenate(parts, axis=0)
+        elapsed    = time.time() - t0
 
         h5_path = h5_dir / f"{slide_id}.h5"
-
         with h5py.File(h5_path, "w") as f:
             f.create_dataset("embeddings", data=embeddings, compression="gzip", compression_opts=4)
             f.create_dataset("patch_ids",  data=np.array(slide_rows["patch_id"].tolist(), dtype="S"))
             f.create_dataset("x",          data=slide_rows["x"].to_numpy(dtype=np.int32))
             f.create_dataset("y",          data=slide_rows["y"].to_numpy(dtype=np.int32))
-            f.attrs["slide_id"]    = slide_id
-            f.attrs["encoder"]     = encoder_dir
-            f.attrs["tissue"]      = tissue
-            f.attrs["n_patches"]   = len(slide_rows)
-            f.attrs["dim"]         = embeddings.shape[1]
+            f.attrs["slide_id"]  = slide_id
+            f.attrs["encoder"]   = encoder_dir
+            f.attrs["tissue"]    = tissue
+            f.attrs["n_patches"] = len(slide_rows)
+            f.attrs["dim"]       = embeddings.shape[1]
 
         print(f"  -> {h5_path}  shape={embeddings.shape}  ({elapsed:.0f}s, {len(slide_rows)/elapsed:.0f} p/s)")
 
@@ -255,7 +287,7 @@ def main() -> None:
     parser.add_argument("--encoder",     default="clip", choices=["clip", "conch"], help="Encoder to use")
     parser.add_argument("--tissue",      default="Larynx", help="Tissue name for output path (e.g. Larynx, Hypopharynx)")
     parser.add_argument("--max_patches", type=int, default=None, help="Max patches sampled per slide (default: no limit)")
-    parser.add_argument("--batch_size",  type=int, default=256,  help="Encoding batch size")
+    parser.add_argument("--batch_size",  type=int, default=1024, help="Encoding batch size")
     parser.add_argument("--num_workers", type=int, default=None, help="Parallel tiling workers (default: CPU count - 2)")
     args = parser.parse_args()
 
@@ -289,7 +321,7 @@ def main() -> None:
     print("\nVerifying patches and cleaning up WSI files ...")
     cleanup_wsi_if_patching_complete(manifest, patches_dir, wsi_dir)
 
-    embed_and_save_per_slide(manifest, out_dir, args.encoder, args.tissue, args.batch_size)
+    embed_and_save_per_slide(manifest, out_dir, args.encoder, args.tissue, args.batch_size, num_workers)
 
     print("\nPipeline complete.")
 

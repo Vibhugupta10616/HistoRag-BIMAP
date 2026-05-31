@@ -62,7 +62,7 @@ python "$HPC_DIR/hpc_pipeline.py" \
     --patches_dir "$PATCHES_DIR" \
     --tissue      "$TISSUE" \
     --encoder     "$ENCODER" \
-    --batch_size  256
+    --batch_size  1024
 
 # --- Step 5: Zip tissue h5 files for local download ---
 ENCODER_UPPER=$(echo "$ENCODER" | tr '[:lower:]' '[:upper:]')
