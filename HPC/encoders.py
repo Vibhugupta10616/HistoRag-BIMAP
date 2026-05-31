@@ -41,6 +41,12 @@ class ClipEncoder:
         features = features / features.norm(dim=-1, keepdim=True)
         return features.cpu().float().numpy()
 
+    @torch.inference_mode()
+    def encode_tensor_batch(self, tensors: torch.Tensor) -> torch.Tensor:
+        """Encode a preprocessed tensor batch, returns L2-normalised features."""
+        feats = self._model.encode_image(tensors)
+        return feats / feats.norm(dim=-1, keepdim=True)
+
     def encode_batched(self, images: list[Image.Image], batch_size: int = 64) -> np.ndarray:
         parts = []
         for i in tqdm(range(0, len(images), batch_size), desc="Encoding (CLIP)"):
@@ -76,6 +82,11 @@ class CONCHEncoder:
         self._model = model.to(device).eval()
         self._preprocess = preprocess
         print(f"CONCHEncoder loaded on {device}")
+
+    @torch.inference_mode()
+    def encode_tensor_batch(self, tensors: torch.Tensor) -> torch.Tensor:
+        """Encode a preprocessed tensor batch, returns L2-normalised features."""
+        return self._model.encode_image(tensors, normalize=True)
 
     @torch.inference_mode()
     def encode(self, images: list[Image.Image]) -> np.ndarray:

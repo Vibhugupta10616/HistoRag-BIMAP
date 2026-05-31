@@ -230,17 +230,15 @@ def embed_and_save_per_slide(
             batch_size=batch_size,
             num_workers=loader_workers,
             pin_memory=True,
-            prefetch_factor=2,
+            prefetch_factor=2 if loader_workers > 0 else None,
         )
 
         t0   = time.time()
         parts = []
-        with torch.inference_mode():
-            for batch in tqdm(loader, desc="  Encoding", leave=False):
-                batch = batch.to(encoder.device, non_blocking=True)
-                feats = encoder._model.encode_image(batch)
-                feats = feats / feats.norm(dim=-1, keepdim=True)
-                parts.append(feats.cpu().float().numpy())
+        for batch in tqdm(loader, desc="  Encoding", leave=False):
+            batch = batch.to(encoder.device, non_blocking=True)
+            feats = encoder.encode_tensor_batch(batch)
+            parts.append(feats.cpu().float().numpy())
 
         embeddings = np.concatenate(parts, axis=0)
         elapsed    = time.time() - t0
