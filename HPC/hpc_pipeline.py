@@ -262,7 +262,15 @@ def embed_and_save_per_slide(
 
 
 def cleanup_wsi_if_patching_complete(manifest: pd.DataFrame, patches_dir: Path, wsi_dir: Path) -> None:
-    """Delete WSI files after verifying all slides have patch directories with PNGs."""
+    """Delete WSI files after verifying all slides have patch directories with PNGs.
+
+    Skips entirely if no WSI files exist (already cleaned or never extracted).
+    """
+    # Check if any actual WSI files exist — skip if already cleaned
+    wsi_files = [f for ext in _WSI_EXTENSIONS for f in wsi_dir.glob(f"*{ext}")]
+    if not wsi_files:
+        return
+
     slide_ids = list(manifest["slide_id"].unique())
 
     # Verify every slide has a non-empty patch directory
