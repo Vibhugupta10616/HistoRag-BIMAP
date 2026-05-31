@@ -284,8 +284,10 @@ def main() -> None:
             raise RuntimeError(f"No WSI files found in {wsi_dir}. Check that extraction completed.")
         print(f"Discovered {len(slides)} slides\n")
         manifest = tile_all(slides, patches_dir, args.max_patches, args.tissue, num_workers)
-        print("\nVerifying patches and cleaning up WSI files ...")
-        cleanup_wsi_if_patching_complete(manifest, patches_dir, wsi_dir)
+
+    # Always verify patches and clean up WSI dir if safe to do so
+    print("\nVerifying patches and cleaning up WSI files ...")
+    cleanup_wsi_if_patching_complete(manifest, patches_dir, wsi_dir)
 
     embed_and_save_per_slide(manifest, out_dir, args.encoder, args.tissue, args.batch_size)
 
