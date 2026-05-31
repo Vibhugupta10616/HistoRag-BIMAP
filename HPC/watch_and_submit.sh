@@ -16,6 +16,15 @@ ZIP_DIR="$WORK/hancock/$TISSUE_LOWER/zips"
 LOG="$HOME/scripts/watch.log"
 REPO="$HOME/HistoRag-BIMAP"
 
+# Expected sizes in bytes for each tissue zip
+declare -A EXPECTED_SIZES
+EXPECTED_SIZES["Larynx"]=314557232221
+EXPECTED_SIZES["Hypopharynx"]=213184293362
+EXPECTED_SIZES["Oral_Cavity"]=0
+EXPECTED_SIZES["Oropharynx1"]=0
+EXPECTED_SIZES["Oropharynx2"]=0
+EXPECTED_SIZE=${EXPECTED_SIZES[$TISSUE]}
+
 log() { echo "[$(date +%H:%M:%S)] $1" | tee -a "$LOG"; }
 
 log "========================================"
@@ -30,14 +39,18 @@ while true; do
         ACTUAL=$(stat -c%s "$ZIP" 2>/dev/null || echo 0)
         log "Found zip: $ZIP ($ACTUAL bytes)"
 
-        # Update embed_job.sh tissue and submit
-        sed -i "s/^TISSUE=.*/TISSUE=\"$TISSUE\"/" "$REPO/HPC/embed_job.sh"
-        JOB_ID=$(sbatch "$REPO/HPC/embed_job.sh" | awk '{print $NF}')
-        log "Submitted job ID: $JOB_ID"
-        log "Monitor with:  squeue -u $USER"
-        log "Live logs:     tail -f $HOME/embed_${JOB_ID}.log"
-        log "Watcher exiting."
-        break
+        # Verify zip is complete before submitting
+        if [ "$EXPECTED_SIZE" -gt 0 ] && [ "$ACTUAL" -ne "$EXPECTED_SIZE" ]; then
+            log "Zip incomplete ($ACTUAL / $EXPECTED_SIZE bytes) — waiting for reassembly to finish ..."
+        else
+            sed -i "s/^TISSUE=.*/TISSUE=\"$TISSUE\"/" "$REPO/HPC/embed_job.sh"
+            JOB_ID=$(sbatch "$REPO/HPC/embed_job.sh" | awk '{print $NF}')
+            log "Submitted job ID: $JOB_ID"
+            log "Monitor with:  squeue -u $USER"
+            log "Live logs:     tail -f $HOME/embed_${JOB_ID}.log"
+            log "Watcher exiting."
+            break
+        fi
     else
         log "No zip found yet in $ZIP_DIR — waiting ..."
     fi
