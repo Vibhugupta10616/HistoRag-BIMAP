@@ -9,6 +9,7 @@
 
 # ── CONFIGURE HERE ────────────────────────────────────────────────────────────
 TISSUE="Hypopharynx"   # Larynx | Hypopharynx | Oral_Cavity | Oropharynx1 | Oropharynx2
+ENCODER="clip"         # clip | conch
 # ─────────────────────────────────────────────────────────────────────────────
 
 TISSUE_LOWER=$(echo "$TISSUE" | tr '[:upper:]' '[:lower:]')
@@ -20,9 +21,9 @@ REPO="$HOME/HistoRag-BIMAP"
 declare -A EXPECTED_SIZES
 EXPECTED_SIZES["Larynx"]=314557232221
 EXPECTED_SIZES["Hypopharynx"]=213184293362
-EXPECTED_SIZES["Oral_Cavity"]=0
-EXPECTED_SIZES["Oropharynx1"]=0
-EXPECTED_SIZES["Oropharynx2"]=0
+EXPECTED_SIZES["Oral_Cavity"]=0    # TODO: fill in once known
+EXPECTED_SIZES["Oropharynx1"]=0   # TODO: fill in once known
+EXPECTED_SIZES["Oropharynx2"]=0   # TODO: fill in once known
 EXPECTED_SIZE=${EXPECTED_SIZES[$TISSUE]}
 
 log() { echo "[$(date +%H:%M:%S)] $1" | tee -a "$LOG"; }
@@ -44,6 +45,7 @@ while true; do
             log "Zip incomplete ($ACTUAL / $EXPECTED_SIZE bytes) — waiting for reassembly to finish ..."
         else
             sed -i "s/^TISSUE=.*/TISSUE=\"$TISSUE\"/" "$REPO/HPC/embed_job.sh"
+            sed -i "s/^ENCODER=.*/ENCODER=\"$ENCODER\"/" "$REPO/HPC/embed_job.sh"
             JOB_ID=$(sbatch "$REPO/HPC/embed_job.sh" | awk '{print $NF}')
             log "Submitted job ID: $JOB_ID"
             log "Monitor with:  squeue -u $USER"

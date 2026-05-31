@@ -8,8 +8,8 @@ Usage:
     Edit URL, OUTPUT, and EXPECTED_SIZE below, then:
     python3 parallel_download.py
 
-Tissue configs:
-    Larynx       : 314,557,232,221 bytes  (exception: saved under larynx/zips/)
+Tissue configs (all save to hancock/{tissue}/zips/):
+    Larynx       : 314,557,232,221 bytes
     Hypopharynx  : 213,184,293,362 bytes
     Oral_Cavity  : TBD
     Oropharynx1  : TBD
