@@ -153,7 +153,10 @@ try:
                 raise FileNotFoundError(f"Missing part file: {part}")
             with open(part, "rb") as pf:
                 shutil.copyfileobj(pf, f, length=copy_buffer_size)
-            os.remove(part)
+            try:
+                os.remove(part)
+            except FileNotFoundError:
+                pass  # GPFS may report file as gone after successful read
 except Exception as e:
     import traceback
     log(f"Reassembly failed: {repr(e)}")
