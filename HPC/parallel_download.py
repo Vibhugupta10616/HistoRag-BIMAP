@@ -1,17 +1,19 @@
 """
 Parallel multi-threaded downloader for HANCOCK WSI zip files.
-Uses HTTP Range requests to download in chunks simultaneously.
-Supports resume — re-run to continue interrupted downloads.
-Reassembly is built-in — runs automatically after all chunks complete.
+Uses HTTP Range requests to download chunks simultaneously,
+writing each chunk DIRECTLY to its correct offset in the final file.
+No part files, no reassembly step — download is the final file.
+
+Supports resume via a .state file tracking completed chunks.
 
 Usage:
-    Edit URL, OUTPUT, and EXPECTED_SIZE below, then:
+    Edit URL, TISSUE_LOWER, and EXPECTED_SIZE below, then:
     python3 parallel_download.py
 
 Tissue configs (all save to hancock/{tissue}/zips/):
     Larynx       : 314,557,232,221 bytes
     Hypopharynx  : 213,184,293,362 bytes
-    Oral_Cavity  : TBD
+    Oral_Cavity  : 429,916,307,251 bytes
     Oropharynx1  : TBD
     Oropharynx2  : TBD
 """
@@ -20,30 +22,26 @@ import threading
 import os
 import sys
 import time
-import shutil
+import json
 
 # ── CONFIGURE HERE ────────────────────────────────────────────────────────────
-URL           = "https://data.fau.de/public/24/87/322108724/WSI_PrimaryTumor_Hypopharynx.zip"
-TISSUE_LOWER  = "hypopharynx"   # lowercase, matches directory name on HPC
-EXPECTED_SIZE = 213184293362
+URL           = "https://data.fau.de/public/24/87/322108724/WSI_PrimaryTumor_OralCavity.zip"
+TISSUE_LOWER  = "oral_cavity"
+EXPECTED_SIZE = 429916307251
 # ─────────────────────────────────────────────────────────────────────────────
 
-output    = os.environ["WORK"] + f"/hancock/{TISSUE_LOWER}/zips/" + os.path.basename(URL)
-log_file  = os.path.expanduser("~/scripts/download.log")
-num_threads      = min(16, os.cpu_count() or 8)
-chunk            = EXPECTED_SIZE // num_threads
-max_retries      = 3
-stall_limit      = 30 * 60
-copy_buffer_size = (
-    128 * 1024 * 1024
-    if (os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")) >= 128 * 1024 * 1024 * 1024
-    else 64 * 1024 * 1024
-)
+output     = os.environ["WORK"] + f"/hancock/{TISSUE_LOWER}/zips/" + os.path.basename(URL)
+state_file = output + ".state"
+log_file   = os.path.expanduser("~/scripts/download.log")
+num_threads = min(16, os.cpu_count() or 8)
+chunk       = EXPECTED_SIZE // num_threads
+max_retries = 3
+stall_limit = 30 * 60
+read_size   = 8 * 1024 * 1024  # 8MB chunks for fewer syscalls
 
-downloaded  = [0] * num_threads
-lock        = threading.Lock()
-abort       = threading.Event()
-reassembling = threading.Event()
+downloaded = [0] * num_threads
+lock       = threading.Lock()
+abort      = threading.Event()
 
 
 def log(msg):
@@ -54,38 +52,53 @@ def log(msg):
         f.write(line + "\n")
 
 
-def download_chunk(start, end, part):
-    part_file  = f"{output}.part{part}"
-    resume     = os.path.getsize(part_file) if os.path.exists(part_file) else 0
-    chunk_size = end - start + 1
+def load_state() -> set:
+    """Load set of already-completed chunk indices."""
+    if os.path.exists(state_file):
+        with open(state_file) as f:
+            return set(json.load(f))
+    return set()
 
-    if resume >= chunk_size:
+
+def save_state(completed: set) -> None:
+    with open(state_file, "w") as f:
+        json.dump(list(completed), f)
+
+
+def download_chunk(start: int, end: int, part: int, completed: set) -> None:
+    if part in completed:
         log(f"Chunk {part} already complete, skipping")
         with lock:
-            downloaded[part] += chunk_size
+            downloaded[part] += end - start + 1
         return
 
-    if resume > 0:
-        log(f"Chunk {part}: resuming from {resume/1e6:.0f} MB")
+    chunk_size = end - start + 1
+    written    = 0
 
     for attempt in range(1, max_retries + 1):
         if abort.is_set():
             return
         try:
-            req = urllib.request.Request(URL)
-            req.add_header("Range", f"bytes={start + resume}-{end}")
+            req = urllib.request.Request(url=URL)
+            req.add_header("Range", f"bytes={start + written}-{end}")
             with urllib.request.urlopen(req, timeout=60) as r:
-                with open(part_file, "ab") as f:
+                with open(output, "r+b") as f:
+                    f.seek(start + written)
                     while not abort.is_set():
-                        buf = r.read(1024 * 1024)
+                        buf = r.read(read_size)
                         if not buf:
                             break
                         f.write(buf)
-                        resume += len(buf)
+                        written += len(buf)
                         with lock:
                             downloaded[part] += len(buf)
-            log(f"Chunk {part} complete")
-            return
+
+            if written >= chunk_size:
+                log(f"Chunk {part} complete")
+                with lock:
+                    completed.add(part)
+                    save_state(completed)
+                return
         except Exception as e:
             log(f"Chunk {part} attempt {attempt}/{max_retries} failed: {e}")
             time.sleep(5)
@@ -94,13 +107,11 @@ def download_chunk(start, end, part):
     abort.set()
 
 
-def watchdog():
+def watchdog() -> None:
     last_total         = 0
     last_progress_time = time.time()
     while not abort.is_set():
         time.sleep(60)
-        if reassembling.is_set():
-            continue
         total = sum(downloaded)
         if total > last_total:
             last_total         = total
@@ -109,12 +120,24 @@ def watchdog():
             stalled = time.time() - last_progress_time
             log(f"Watchdog: no progress for {stalled/60:.1f} min")
             if stalled >= stall_limit:
-                log("No progress for 30 minutes — aborting download")
+                log("No progress for 30 minutes — aborting")
                 abort.set()
 
 
 os.makedirs(os.path.dirname(output), exist_ok=True)
-log(f"Starting download: {EXPECTED_SIZE/1e9:.1f} GB in {num_threads} chunks")
+
+completed = load_state()
+is_resume = len(completed) > 0
+
+if not is_resume:
+    # Pre-allocate file so all threads can write in parallel
+    log(f"Pre-allocating {EXPECTED_SIZE/1e9:.1f} GB file ...")
+    with open(output, "wb") as f:
+        os.truncate(f.fileno(), EXPECTED_SIZE)
+else:
+    log(f"Resuming: {len(completed)}/{num_threads} chunks already done")
+
+log(f"Downloading: {EXPECTED_SIZE/1e9:.1f} GB in {num_threads} chunks")
 log(f"Output: {output}")
 
 wd = threading.Thread(target=watchdog, daemon=True)
@@ -124,7 +147,7 @@ threads = []
 for i in range(num_threads):
     start = i * chunk
     end   = (i + 1) * chunk - 1 if i < num_threads - 1 else EXPECTED_SIZE - 1
-    t     = threading.Thread(target=download_chunk, args=(start, end, i))
+    t     = threading.Thread(target=download_chunk, args=(start, end, i, completed))
     threads.append(t)
     t.start()
 
@@ -140,32 +163,15 @@ for t in threads:
     t.join()
 
 if abort.is_set():
-    log("Download aborted — part files kept for resume")
+    log("Download aborted — re-run to resume from completed chunks")
     sys.exit(1)
 
-reassembling.set()
-log("Reassembling chunks...")
-try:
-    with open(output, "wb") as f:
-        for i in range(num_threads):
-            part = f"{output}.part{i}"
-            if not os.path.exists(part):
-                raise FileNotFoundError(f"Missing part file: {part}")
-            with open(part, "rb") as pf:
-                shutil.copyfileobj(pf, f, length=copy_buffer_size)
-            try:
-                os.remove(part)
-            except FileNotFoundError:
-                pass  # GPFS may report file as gone after successful read
-except Exception as e:
-    import traceback
-    log(f"Reassembly failed: {repr(e)}")
-    log(traceback.format_exc())
-    sys.exit(1)
-
+# Verify final size
 actual = os.path.getsize(output)
 if actual != EXPECTED_SIZE:
-    log(f"Size mismatch! Expected {EXPECTED_SIZE}, got {actual} — file may be corrupt")
+    log(f"Size mismatch! Expected {EXPECTED_SIZE}, got {actual}")
     sys.exit(1)
 
+# Clean up state file
+os.remove(state_file)
 log(f"Download complete and verified: {output}")
