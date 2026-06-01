@@ -126,11 +126,17 @@ def watchdog() -> None:
 
 os.makedirs(os.path.dirname(output), exist_ok=True)
 
+# Already complete — nothing to do
+if os.path.exists(output) and os.path.getsize(output) == EXPECTED_SIZE and not os.path.exists(state_file):
+    log(f"File already complete: {output}")
+    sys.exit(0)
+
 completed = load_state()
-is_resume = len(completed) > 0
+is_resume = len(completed) > 0 and os.path.exists(output)
 
 if not is_resume:
-    # Pre-allocate file so all threads can write in parallel
+    # Fresh start — pre-allocate file so all threads can write in parallel
+    completed = set()
     log(f"Pre-allocating {EXPECTED_SIZE/1e9:.1f} GB file ...")
     with open(output, "wb") as f:
         os.truncate(f.fileno(), EXPECTED_SIZE)
