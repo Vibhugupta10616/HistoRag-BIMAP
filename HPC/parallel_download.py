@@ -140,6 +140,7 @@ if not is_resume:
     log(f"Pre-allocating {EXPECTED_SIZE/1e9:.1f} GB file ...")
     with open(output, "wb") as f:
         os.truncate(f.fileno(), EXPECTED_SIZE)
+    save_state(completed)  # create state file immediately so re-run detects incomplete
 else:
     log(f"Resuming: {len(completed)}/{num_threads} chunks already done")
 
