@@ -39,11 +39,18 @@ log "Output   : $OUT_DIR"
 log "Loading Python module ..."
 module load python/pytorch2.6py3.12
 
-# --- Step 2: Extract zip (skip if WSI files already exist) ---
+# --- Step 2: Extract zip (skip if WSI files or patches already exist) ---
+MANIFEST="$PATCHES_DIR/manifest.parquet"
 mkdir -p "$WSI_DIR"
 if [ -n "$(ls -A "$WSI_DIR" 2>/dev/null)" ]; then
     log "WSI files already extracted ($(ls "$WSI_DIR" | wc -l) files), skipping unzip."
+elif [ -f "$MANIFEST" ]; then
+    log "Patches manifest found — tiling already done, skipping unzip."
 else
+    if [ -z "$ZIP" ]; then
+        log "ERROR: No zip found in $WORK/hancock/$TISSUE_LOWER/zips/ and no patches exist. Cannot proceed."
+        exit 1
+    fi
     log "Extracting $ZIP ..."
     unzip -o "$ZIP" -d "$WSI_DIR"
     log "Extraction complete — $(ls "$WSI_DIR" | wc -l) files"
