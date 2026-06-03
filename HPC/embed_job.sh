@@ -63,13 +63,13 @@ python -c "import torch; print('CUDA:', torch.cuda.is_available()); print('GPU:'
 
 # --- Step 4: Tile + embed ---
 log "Starting pipeline ..."
-python "$HPC_DIR/hpc_pipeline.py" \
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python "$HPC_DIR/hpc_pipeline.py" \
     --wsi_dir     "$WSI_DIR" \
     --out_dir     "$OUT_DIR" \
     --patches_dir "$PATCHES_DIR" \
     --tissue      "$TISSUE" \
     --encoder     "$ENCODER" \
-    --batch_size  512
+    --batch_size  256
 
 # --- Step 5: Zip tissue h5 files for local download ---
 ENCODER_UPPER=$(echo "$ENCODER" | tr '[:lower:]' '[:upper:]')
