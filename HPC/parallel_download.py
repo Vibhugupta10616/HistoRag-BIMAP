@@ -15,7 +15,7 @@ Tissue configs (all save to hancock/{tissue}/zips/):
     Hypopharynx  : 213,184,293,362 bytes
     Oral_Cavity  : 429,916,307,251 bytes
     Oropharynx1  : 516,446,064,041 bytes
-    Oropharynx2  : TBD
+    Oropharynx2  : 528,375,773,776 bytes
 """
 import urllib.request
 import threading
@@ -25,9 +25,9 @@ import time
 import json
 
 # ── CONFIGURE HERE ────────────────────────────────────────────────────────────
-URL           = "https://data.fau.de/public/24/87/322108724/WSI_PrimaryTumor_Oropharynx_Part1.zip"
-TISSUE_LOWER  = "oropharynx1"
-EXPECTED_SIZE = 516446064041
+URL           = "https://data.fau.de/public/24/87/322108724/WSI_PrimaryTumor_Oropharynx_Part2.zip"
+TISSUE_LOWER  = "oropharynx2"
+EXPECTED_SIZE = 528375773776
 # ─────────────────────────────────────────────────────────────────────────────
 
 output     = os.environ["WORK"] + f"/hancock/{TISSUE_LOWER}/zips/" + os.path.basename(URL)
