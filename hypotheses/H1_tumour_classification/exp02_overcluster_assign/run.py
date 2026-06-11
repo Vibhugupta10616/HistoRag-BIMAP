@@ -33,9 +33,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT))
 
 import numpy as np
-import pandas as pd
 import yaml
 
+from histoRAG.loader import load_encoder
 from histoRAG.labels import tumour_labels_from_geojson
 from histoRAG.classify import (
     cluster_embeddings,
@@ -53,16 +53,18 @@ def run(config_path: str | Path) -> None:
     out_dir = Path(cfg["outputs"]["dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # -------------------------------------------------------- load embeddings
-    emb_path = Path(cfg["inputs"]["embeddings_path"])
-    print(f"[H1 exp02] Loading embeddings: {emb_path}")
-    embeddings = np.load(emb_path)                      # (N_patches, dim)
-    manifest   = pd.read_parquet(cfg["inputs"]["manifest_path"])
+    encoder = cfg["encoder"]
+    geojson_dir = Path(cfg["inputs"]["geojson_dir"])
 
-    assert len(embeddings) == len(manifest), (
-        f"Row count mismatch: embeddings={len(embeddings)}, manifest={len(manifest)}. "
-        "Embeddings must be row-aligned to the manifest."
-    )
+    if not geojson_dir.exists():
+        raise FileNotFoundError(
+            f"geojson_dir not found: {geojson_dir}\n"
+            "Download the HANCOCK .geojson annotation files and update config.yaml."
+        )
+
+    # -------------------------------------------------------- load embeddings
+    print(f"[H1 exp02] Loading embeddings for encoder '{encoder}'...")
+    embeddings, manifest = load_encoder(encoder, cfg["inputs"]["embeddings_root"])
     print(f"[H1 exp02] {len(manifest)} patches | embedding dim = {embeddings.shape[1]}")
 
     # ------------------------------------------------------- ground-truth labels
@@ -108,7 +110,7 @@ def run(config_path: str | Path) -> None:
     # ------------------------------------------------------ save summary
     summary = {
         "experiment":      cfg["experiment"]["name"],
-        "encoder":         cfg["encoder"],
+        "encoder":         encoder,
         "n_clusters":      n_clusters,
         "n_patches":       int(len(manifest)),
         "n_tumour_gt":     n_tumour,

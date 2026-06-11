@@ -2,7 +2,7 @@
 H1 Experiment 01 — K-means k=2 (Dominant-Axis Test)
 
 Pipeline:
-    1. Load patch embeddings (provided by user, aligned to manifest)
+    1. Load patch embeddings via histoRAG.loader (reads h5 files from embeddings_root)
     2. Derive ground-truth patch labels (tumour/other) from QuPath .geojson annotations
     3. Cluster all patches with K-means k=2 (no labels used during clustering)
     4. Map each cluster to tumour/other by majority vote against ground-truth labels
@@ -11,10 +11,9 @@ Pipeline:
 
 Question answered:
     Is tumour tissue the DOMINANT axis of variation in the encoder's embedding space?
-    If yes -> the two clusters should split cleanly along tumour vs other.
-    If no  -> the dominant split is something else (stain, tissue type, scanner).
-    Either result is informative; comparison across encoders reveals which embeddings
-    have tumour as their primary discriminative signal.
+
+NOTE: Requires .geojson annotation files in geojson_dir (one per slide).
+      Download from the HANCOCK dataset before running.
 
 To run:
     python hypotheses/H1_tumour_classification/exp01_kmeans_k2/run.py
@@ -28,9 +27,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT))
 
 import numpy as np
-import pandas as pd
 import yaml
 
+from histoRAG.loader import load_encoder
 from histoRAG.labels import tumour_labels_from_geojson
 from histoRAG.classify import (
     cluster_embeddings,
@@ -48,22 +47,24 @@ def run(config_path: str | Path) -> None:
     out_dir = Path(cfg["outputs"]["dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # -------------------------------------------------------- load embeddings
-    emb_path = Path(cfg["inputs"]["embeddings_path"])
-    print(f"[H1 exp01] Loading embeddings: {emb_path}")
-    embeddings = np.load(emb_path)                      # (N_patches, dim)
-    manifest   = pd.read_parquet(cfg["inputs"]["manifest_path"])
+    encoder = cfg["encoder"]
+    geojson_dir = Path(cfg["inputs"]["geojson_dir"])
 
-    assert len(embeddings) == len(manifest), (
-        f"Row count mismatch: embeddings={len(embeddings)}, manifest={len(manifest)}. "
-        "Embeddings must be row-aligned to the manifest."
-    )
+    if not geojson_dir.exists():
+        raise FileNotFoundError(
+            f"geojson_dir not found: {geojson_dir}\n"
+            "Download the HANCOCK .geojson annotation files and update config.yaml."
+        )
+
+    # -------------------------------------------------------- load embeddings
+    print(f"[H1 exp01] Loading embeddings for encoder '{encoder}'...")
+    embeddings, manifest = load_encoder(encoder, cfg["inputs"]["embeddings_root"])
     print(f"[H1 exp01] {len(manifest)} patches | embedding dim = {embeddings.shape[1]}")
 
     # ------------------------------------------------------- ground-truth labels
     print("[H1 exp01] Deriving ground-truth tumour labels from .geojson annotations...")
-    tumour_labels = tumour_labels_from_geojson(manifest, cfg["inputs"]["geojson_dir"])
-    true_labels   = (tumour_labels == "tumour").astype(int).values  # 1=tumour, 0=other
+    tumour_labels = tumour_labels_from_geojson(manifest, geojson_dir)
+    true_labels   = (tumour_labels == "tumour").astype(int).values
 
     n_tumour = int(true_labels.sum())
     n_other  = int((true_labels == 0).sum())
@@ -92,7 +93,7 @@ def run(config_path: str | Path) -> None:
     # ------------------------------------------------------ save summary
     summary = {
         "experiment":    cfg["experiment"]["name"],
-        "encoder":       cfg["encoder"],
+        "encoder":       encoder,
         "n_clusters":    n_clusters,
         "n_patches":     int(len(manifest)),
         "n_tumour_gt":   n_tumour,

@@ -6,19 +6,17 @@ experiment:
     Tests whether tumour tissue is the dominant axis of variation in the
     encoder's embedding space. Clusters mapped to tumour/other by majority
     vote against .geojson ground-truth labels.
+    NOTE: requires .geojson annotation files — cannot run until they are downloaded.
 
 # Encoder whose embeddings to use. One of: clip-vitb16 | conch | uni2h
 encoder: clip-vitb16
 
 inputs:
-  # Pre-computed patch embeddings (provided by user).
-  # Shape: (N_patches, dim), float32, row-aligned to manifest_path.
-  embeddings_path: data/embeddings/clip-vitb16/patch_embeddings.npy
-
-  # Patch manifest produced by the tiling pipeline.
-  manifest_path: data/patches/manifest.parquet
+  # Root directory containing all unzipped encoder folders (CLIP/, CONCH/, UNI/).
+  embeddings_root: E:/embeddings
 
   # Directory containing one <slide_id>.geojson per slide (QuPath tumour annotations).
+  # Download from HANCOCK dataset. Leave blank until available.
   geojson_dir: data/raw/annotations/
 
 params:

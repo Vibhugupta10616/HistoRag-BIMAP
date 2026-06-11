@@ -12,20 +12,12 @@ experiment:
 encoder: clip-vitb16
 
 inputs:
-  # Pre-computed patch embeddings (all patches, provided by user).
-  # Shape: (N_patches, dim), float32, row-aligned to manifest_path.
-  embeddings_path: data/embeddings/clip-vitb16/patch_embeddings.npy
-
-  # Patch manifest produced by the tiling pipeline.
-  manifest_path: data/patches/manifest.parquet
+  # Root directory containing all unzipped encoder folders (CLIP/, CONCH/, UNI/).
+  embeddings_root: E:/embeddings
 
   # Directory containing one <slide_id>.geojson per slide (QuPath tumour annotations).
+  # Download from HANCOCK dataset. Leave blank until available.
   geojson_dir: data/raw/annotations/
-
-  # HANCOCK clinical metadata (for site labels used in UMAP colouring).
-  clinical_metadata: data/raw/hancock_clinical.csv
-  slide_id_col: patient_id
-  site_col: primary_site
 
 params:
   umap:

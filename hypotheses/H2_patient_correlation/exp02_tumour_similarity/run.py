@@ -31,7 +31,8 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from histoRAG.labels import tumour_labels_from_geojson, site_labels_from_clinical
+from histoRAG.loader import load_encoder
+from histoRAG.labels import tumour_labels_from_geojson
 from histoRAG.correlate import (
     aggregate_by_patient,
     correlation_matrix,
@@ -52,34 +53,27 @@ def run(config_path: str | Path) -> None:
     out_dir = Path(cfg["outputs"]["dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # -------------------------------------------------------- load embeddings
-    emb_path = Path(cfg["inputs"]["embeddings_path"])
-    print(f"[H2 exp02] Loading embeddings: {emb_path}")
-    embeddings = np.load(emb_path)                       # (N_patches, dim)
-    manifest   = pd.read_parquet(cfg["inputs"]["manifest_path"])
+    encoder = cfg["encoder"]
+    geojson_dir = Path(cfg["inputs"]["geojson_dir"])
 
-    assert len(embeddings) == len(manifest), (
-        f"Row count mismatch: embeddings={len(embeddings)}, manifest={len(manifest)}. "
-        "Embeddings must be row-aligned to the manifest."
-    )
+    if not geojson_dir.exists():
+        raise FileNotFoundError(
+            f"geojson_dir not found: {geojson_dir}\n"
+            "Download the HANCOCK .geojson annotation files and update config.yaml."
+        )
+
+    # -------------------------------------------------------- load embeddings
+    print(f"[H2 exp02] Loading embeddings for encoder '{encoder}'...")
+    embeddings, manifest = load_encoder(encoder, cfg["inputs"]["embeddings_root"])
     print(f"[H2 exp02] {len(manifest)} patches | {manifest['slide_id'].nunique()} patients")
 
+    # site labels come from the loader manifest directly (no clinical CSV needed)
     manifest = manifest.copy()
 
-    # ---------------------------------------------------- derive labels
+    # ---------------------------------------------------- derive tumour labels
     print("[H2 exp02] Deriving tumour labels from .geojson annotations...")
-    tumour_labels = tumour_labels_from_geojson(manifest, cfg["inputs"]["geojson_dir"])
+    tumour_labels = tumour_labels_from_geojson(manifest, geojson_dir)
     manifest["tumour_label"] = tumour_labels.values
-
-    # site labels are used only for UMAP colouring (not for filtering/analysis)
-    print("[H2 exp02] Loading site labels for UMAP colouring...")
-    site_labels = site_labels_from_clinical(
-        manifest,
-        cfg["inputs"]["clinical_metadata"],
-        slide_id_col=cfg["inputs"].get("slide_id_col", "patient_id"),
-        site_col=cfg["inputs"].get("site_col", "primary_site"),
-    )
-    manifest["site"] = site_labels.values
 
     # ----------------------------------------------- filter to tumour patches
     tumour_mask = manifest["tumour_label"] == "tumour"
@@ -108,7 +102,7 @@ def run(config_path: str | Path) -> None:
         umap_coords,
         labels=tumour_manifest["site"].values,
         out_path=out_dir / "umap_tumour_patches_by_site.png",
-        title=f"Tumour Patch Embeddings ({cfg['encoder']})  —  expected: sites mixed",
+        title=f"Tumour Patch Embeddings ({encoder})  —  expected: sites mixed",
     )
 
     # ----------------------------------- adaptive aggregation + correlation map
@@ -127,14 +121,14 @@ def run(config_path: str | Path) -> None:
         heatmap_group_labels = id_to_site.loc[agg_ids].values
         heatmap_embeddings   = agg_embeddings
         heatmap_title = (
-            f"Patient Cancer Similarity ({cfg['encoder']})  —  expected: uniformly high"
+            f"Patient Cancer Similarity ({encoder})  —  expected: uniformly high"
         )
     else:
         # individual patch-level correlation; group axis by patient for readability
         heatmap_embeddings   = tumour_embeddings
         heatmap_group_labels = tumour_manifest["slide_id"].values
         heatmap_title = (
-            f"Tumour Patch Similarity ({cfg['encoder']})  —  expected: uniformly high"
+            f"Tumour Patch Similarity ({encoder})  —  expected: uniformly high"
         )
 
     corr = correlation_matrix(heatmap_embeddings)

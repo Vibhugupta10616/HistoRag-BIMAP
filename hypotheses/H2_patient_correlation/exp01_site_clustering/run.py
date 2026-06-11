@@ -2,12 +2,13 @@
 H2 Experiment 01 — Site Clustering (Q1)
 
 Pipeline:
-    1. Load patch embeddings (all patches, provided by user)
-    2. Load per-patient anatomical site labels from HANCOCK clinical metadata
-    3. Aggregate all patches per patient: mean pool → 1 vector/patient
+    1. Load all patch embeddings for the configured encoder via histoRAG.loader
+       (reads directly from h5 files under embeddings_root)
+    2. Site labels come from the loader manifest — no clinical CSV needed
+    3. Aggregate patches per patient: mean pool -> 1 vector/patient
     4. UMAP — 2-D scatter of patient vectors coloured by anatomical site
-       Expected: 3 distinct clusters (Oropharynx / Larynx / Oral Cavity)
-    5. Correlation matrix — N×N patient cosine similarity heatmap
+       Expected: distinct clusters per site
+    5. Correlation matrix — N x N patient cosine similarity heatmap
        Expected: block-diagonal pattern (high within-site, low across-site)
     6. Save outputs/
 
@@ -26,7 +27,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from histoRAG.labels import site_labels_from_clinical
+from histoRAG.loader import load_encoder
 from histoRAG.correlate import (
     aggregate_by_patient,
     correlation_matrix,
@@ -45,28 +46,16 @@ def run(config_path: str | Path) -> None:
     out_dir = Path(cfg["outputs"]["dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    encoder = cfg["encoder"]
+    embeddings_root = cfg["inputs"]["embeddings_root"]
+
     # -------------------------------------------------------- load embeddings
-    emb_path = Path(cfg["inputs"]["embeddings_path"])
-    print(f"[H2 exp01] Loading embeddings: {emb_path}")
-    embeddings = np.load(emb_path)                       # (N_patches, dim)
-    manifest   = pd.read_parquet(cfg["inputs"]["manifest_path"])
+    print(f"[H2 exp01] Loading embeddings for encoder '{encoder}' from {embeddings_root}")
+    embeddings, manifest = load_encoder(encoder, embeddings_root)
 
-    assert len(embeddings) == len(manifest), (
-        f"Row count mismatch: embeddings={len(embeddings)}, manifest={len(manifest)}. "
-        "Embeddings must be row-aligned to the manifest."
-    )
     print(f"[H2 exp01] {len(manifest)} patches | {manifest['slide_id'].nunique()} patients")
-
-    # ---------------------------------------------------- derive site labels
-    print("[H2 exp01] Loading anatomical site labels from clinical metadata...")
-    site_labels = site_labels_from_clinical(
-        manifest,
-        cfg["inputs"]["clinical_metadata"],
-        slide_id_col=cfg["inputs"].get("slide_id_col", "patient_id"),
-        site_col=cfg["inputs"].get("site_col", "primary_site"),
-    )
-    manifest = manifest.copy()
-    manifest["site"] = site_labels.values
+    site_counts = dict(manifest.drop_duplicates("slide_id")["site"].value_counts())
+    print(f"[H2 exp01] Patients per site: {site_counts}")
 
     # ------------------------------------------------- aggregate per patient
     print("[H2 exp01] Aggregating patches per patient (mean pool)...")
@@ -77,11 +66,10 @@ def run(config_path: str | Path) -> None:
         method=cfg["params"].get("aggregation", "mean"),
     )
 
-    # one site label per patient (derived from per-patch labels)
+    # one site label per patient
     id_to_site = manifest.drop_duplicates("slide_id").set_index("slide_id")["site"]
     patient_sites = id_to_site.loc[patient_ids].values
-    site_counts = dict(pd.Series(patient_sites).value_counts())
-    print(f"[H2 exp01] {len(patient_ids)} patients | Site counts: {site_counts}")
+    print(f"[H2 exp01] {len(patient_ids)} patient vectors | dim={patient_embeddings.shape[1]}")
 
     # ----------------------------------------------------------------- UMAP
     print("[H2 exp01] Computing UMAP on patient-level embeddings...")
@@ -95,18 +83,18 @@ def run(config_path: str | Path) -> None:
         umap_coords,
         labels=patient_sites,
         out_path=out_dir / "umap_patients_by_site.png",
-        title=f"WSI-level Embeddings ({cfg['encoder']})  —  expected: 3 site clusters",
+        title=f"WSI-level Embeddings ({encoder})  —  coloured by anatomical site",
     )
 
     # ------------------------------------------- correlation matrix + heatmap
-    print("[H2 exp01] Computing patient--patient correlation matrix...")
+    print("[H2 exp01] Computing patient-patient correlation matrix...")
     corr = correlation_matrix(patient_embeddings)
 
     plot_heatmap(
         corr,
         group_labels=patient_sites,
         out_path=out_dir / "heatmap_patient_correlation.png",
-        title=f"Patient Correlation by Site ({cfg['encoder']})  —  expected: block-diagonal",
+        title=f"Patient Correlation by Site ({encoder})  —  expected: block-diagonal",
         order_by_group=True,
     )
     np.save(out_dir / "correlation_matrix.npy", corr)
@@ -114,10 +102,11 @@ def run(config_path: str | Path) -> None:
     # --------------------------------------------------------------- summary
     summary = {
         "experiment":   cfg["experiment"]["name"],
-        "encoder":      cfg["encoder"],
+        "encoder":      encoder,
         "n_patients":   int(len(patient_ids)),
         "n_patches":    int(len(manifest)),
         "site_counts":  {str(k): int(v) for k, v in site_counts.items()},
+        "embedding_dim": int(patient_embeddings.shape[1]),
         "outputs": [
             "umap_patients_by_site.png",
             "heatmap_patient_correlation.png",
