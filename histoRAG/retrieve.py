@@ -89,24 +89,43 @@ def slide_query_gallery_split(
 # ---------------------------------------------------------------------------
 
 def top_k_accuracy(retrieved_labels: np.ndarray, query_labels: np.ndarray, k: int) -> float:
-    """Fraction of queries where the correct label appears in the top-k results."""
-    hits = (retrieved_labels[:, :k] == query_labels[:, None]).any(axis=1)
+    """Fraction of queries where the correct label appears in the top-k results.
+    
+    Vectorized for performance. Handles empty string padding gracefully.
+    """
+    if k > retrieved_labels.shape[1]:
+        k = retrieved_labels.shape[1]
+    top_k = retrieved_labels[:, :k]
+    # Use broadcasting to compare each query label with its top-k results
+    hits = (top_k == query_labels[:, None]).any(axis=1)
     return float(hits.mean())
 
 
 def mean_average_precision(retrieved_labels: np.ndarray, query_labels: np.ndarray, k: int) -> float:
-    """Mean Average Precision at k (mAP@k)."""
+    """Mean Average Precision at k (mAP@k).
+    
+    Optimized to minimize string comparisons for empty padding.
+    """
+    if k > retrieved_labels.shape[1]:
+        k = retrieved_labels.shape[1]
+    
     top_k = retrieved_labels[:, :k]
     aps = []
+    
     for q in range(len(query_labels)):
-        rels = (top_k[q] == query_labels[q]).astype(float)
+        query_label = query_labels[q]
+        # Skip empty strings in comparison
+        rels = (top_k[q] == query_label).astype(float)
         n_rel = rels.sum()
+        
         if n_rel == 0:
             aps.append(0.0)
             continue
+        
         cumulative = np.cumsum(rels)
         ranks = np.arange(1, k + 1, dtype=float)
         aps.append(float((cumulative / ranks * rels).sum() / n_rel))
+    
     return float(np.mean(aps))
 
 

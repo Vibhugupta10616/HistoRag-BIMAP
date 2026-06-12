@@ -48,6 +48,20 @@ class ClipEncoder:
             parts.append(self.encode(images[i : i + batch_size]))
         return np.concatenate(parts, axis=0)
 
+    def encode_from_paths(self, image_paths: list[str], batch_size: int = 32) -> np.ndarray:
+        """Encode images directly from file paths, streaming only batch_size images at a time.
+        
+        Memory-efficient alternative to loading all images first.
+        """
+        parts = []
+        n_batches = (len(image_paths) + batch_size - 1) // batch_size
+        for batch_idx in tqdm(range(n_batches), desc=f"Encoding ({self.name})"):
+            start = batch_idx * batch_size
+            end = min(start + batch_size, len(image_paths))
+            images = [Image.open(p).convert("RGB") for p in image_paths[start:end]]
+            parts.append(self.encode(images))
+        return np.concatenate(parts, axis=0)
+
 
 class CONCHEncoder:
     """Encodes patches using CONCH (histopathology vision-language, MahmoodLab).
@@ -93,6 +107,17 @@ class CONCHEncoder:
         parts = []
         for i in tqdm(range(0, len(images), batch_size), desc=f"Encoding ({self.name})"):
             parts.append(self.encode(images[i : i + batch_size]))
+        return np.concatenate(parts, axis=0)
+
+    def encode_from_paths(self, image_paths: list[str], batch_size: int = 32) -> np.ndarray:
+        """Encode images directly from file paths, streaming only batch_size images at a time."""
+        parts = []
+        n_batches = (len(image_paths) + batch_size - 1) // batch_size
+        for batch_idx in tqdm(range(n_batches), desc=f"Encoding ({self.name})"):
+            start = batch_idx * batch_size
+            end = min(start + batch_size, len(image_paths))
+            images = [Image.open(p).convert("RGB") for p in image_paths[start:end]]
+            parts.append(self.encode(images))
         return np.concatenate(parts, axis=0)
 
 
@@ -146,6 +171,17 @@ class UNIEncoder:
         parts = []
         for i in tqdm(range(0, len(images), batch_size), desc=f"Encoding ({self.name})"):
             parts.append(self.encode(images[i : i + batch_size]))
+        return np.concatenate(parts, axis=0)
+
+    def encode_from_paths(self, image_paths: list[str], batch_size: int = 32) -> np.ndarray:
+        """Encode images directly from file paths, streaming only batch_size images at a time."""
+        parts = []
+        n_batches = (len(image_paths) + batch_size - 1) // batch_size
+        for batch_idx in tqdm(range(n_batches), desc=f"Encoding ({self.name})"):
+            start = batch_idx * batch_size
+            end = min(start + batch_size, len(image_paths))
+            images = [Image.open(p).convert("RGB") for p in image_paths[start:end]]
+            parts.append(self.encode(images))
         return np.concatenate(parts, axis=0)
 
 

@@ -27,6 +27,7 @@ from matplotlib.path import Path as MplPath
 def tumour_labels_from_geojson(
     manifest: pd.DataFrame,
     geojson_dir: str | Path,
+    patch_size: int = 256,
 ) -> pd.Series:
     """
     Assign 'tumour' or 'other' to every patch in the manifest.
@@ -42,6 +43,8 @@ def tumour_labels_from_geojson(
                      WSI pixel space at the extraction level).
         geojson_dir: directory containing one .geojson file per slide,
                      named <slide_id>.geojson (QuPath export format).
+        patch_size:  patch width/height in WSI pixels. Used to convert
+                     top-left coordinates to patch centers.
 
     Returns:
         pd.Series of str, index aligned to manifest.index,
@@ -64,11 +67,7 @@ def tumour_labels_from_geojson(
             print(f"[labels] No tumour polygons found in {geojson_path.name}.")
             continue
 
-        # patch center = top-left (x, y) + half the patch size
-        # manifests created by tile.py store the top-left corner; we use (x, y)
-        # directly as the center proxy (acceptable for large polygons relative to
-        # 256-px patches, but can add patch_size/2 offset if needed)
-        centers = group[["x", "y"]].values.astype(float)
+        centers = group[["x", "y"]].values.astype(float) + (patch_size / 2.0)
 
         # a patch is tumour if it falls inside ANY polygon for this slide
         is_tumour = np.zeros(len(group), dtype=bool)

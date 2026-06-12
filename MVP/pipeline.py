@@ -145,8 +145,13 @@ def embed(manifest: pd.DataFrame, cfg: dict) -> tuple[np.ndarray, np.ndarray]:
         torch.cuda.reset_peak_memory_stats()
 
     t_encode_start = time.time()
-    images = [Image.open(p).convert("RGB") for p in tqdm(manifest["path"], desc="Loading patches")]
-    embeddings = encoder.encode_batched(images, batch_size=enc_cfg.get("batch_size", 32))
+    # Stream images directly from disk instead of loading all into memory first
+    if hasattr(encoder, 'encode_from_paths'):
+        embeddings = encoder.encode_from_paths(manifest["path"].tolist(), batch_size=enc_cfg.get("batch_size", 32))
+    else:
+        # Fallback for encoders without streaming support
+        images = [Image.open(p).convert("RGB") for p in tqdm(manifest["path"], desc="Loading patches")]
+        embeddings = encoder.encode_batched(images, batch_size=enc_cfg.get("batch_size", 32))
     encode_seconds = time.time() - t_encode_start
 
     int_ids = np.arange(len(manifest), dtype=np.int64)
@@ -212,20 +217,25 @@ def evaluate_patches(
 
     sims, retrieved_ids = index.search(query_embs, k=max_k + 1)
 
-    retrieved_labels = []
+    # Efficiently build retrieved_labels by vectorizing where possible
+    manifest_labels = manifest["label"].to_numpy()
+    query_int_ids = query_idx.to_numpy()
+    
+    retrieved_labels_list = []
     for q_pos, q_int_id in enumerate(query_idx):
         row_labels = []
         for ret_id in retrieved_ids[q_pos]:
+            # Skip self-retrieval and invalid IDs
             if ret_id == q_int_id or ret_id < 0 or ret_id >= len(manifest):
                 continue
-            row_labels.append(manifest.iloc[ret_id]["label"])
+            row_labels.append(manifest_labels[ret_id])
             if len(row_labels) == max_k:
                 break
-        while len(row_labels) < max_k:
-            row_labels.append("")
-        retrieved_labels.append(row_labels)
-
-    retrieved_labels = np.array(retrieved_labels)
+        # Pad with empty strings to reach max_k
+        row_labels.extend([""] * (max_k - len(row_labels)))
+        retrieved_labels_list.append(row_labels[:max_k])
+    
+    retrieved_labels = np.array(retrieved_labels_list)
     metrics: dict = {"eval_level": "patch"}
     for k in eval_cfg["k_values"]:
         metrics[f"top{k}"] = top_k_accuracy(retrieved_labels, query_labels, k=k)

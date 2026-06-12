@@ -1,5 +1,5 @@
 # HistoRAG-BIMAP dependencies
-# Pinned to versions tested on Windows 11, GTX 1650, CUDA 12.4
+# Pinned to versions tested on Windows 11, RTX 5050, CUDA 12.4
 #
 # GPU install (recommended — match your CUDA version):
 #   pip install torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cu124

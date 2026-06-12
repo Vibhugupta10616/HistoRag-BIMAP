@@ -6,8 +6,8 @@ Pipeline:
     2. Derive ground-truth patch labels (tumour/other) from QuPath .geojson annotations
     3. Cluster all patches with K-means k=8 (no labels used during clustering)
     4. Map each cluster to tumour/other by majority vote against ground-truth labels
-    5. Compute Accuracy, Precision, Recall
-    6. Save summary.json to outputs/
+    5. Compute Accuracy, Precision, Recall per tissue and overall
+    6. Save summary.json with per-tissue breakdown to outputs/
 
 Question answered:
     Is tumour signal PRESENT in the encoder's embedding space, even if it is not the
@@ -33,6 +33,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT))
 
 import numpy as np
+import pandas as pd
 import yaml
 
 from histoRAG.loader import load_encoder
@@ -103,9 +104,55 @@ def run(config_path: str | Path) -> None:
             f"{gt_tumour_pct:.1f}% tumour GT -> '{majority}'"
         )
 
-    # ------------------------------------------------------------ evaluate
+    # ------------------------------------------------------------ evaluate overall
     metrics = classification_metrics(true_labels, predicted)
-    print(f"[H1 exp02] Metrics: {metrics}")
+    print(f"[H1 exp02] Overall Metrics: {metrics}")
+
+    # ------------------------------------------------ per-tissue analysis
+    print("\n[H1 exp02] Per-tissue results:")
+    tissue_results = []
+    
+    for tissue in sorted(manifest["site"].unique()):
+        tissue_mask = manifest["site"] == tissue
+        tissue_indices = np.where(tissue_mask)[0]
+        
+        tissue_true_labels = true_labels[tissue_indices]
+        tissue_predicted = predicted[tissue_indices]
+        tissue_cluster_ids = cluster_ids[tissue_indices]
+        
+        tissue_metrics = classification_metrics(tissue_true_labels, tissue_predicted)
+        
+        # Cluster breakdown for this tissue (all 8 clusters)
+        cluster_breakdown = []
+        for cid in range(n_clusters):
+            mask = tissue_cluster_ids == cid
+            if mask.sum() > 0:
+                gt_tumour_pct = float(tissue_true_labels[mask].mean() * 100)
+                cluster_breakdown.append({
+                    "cluster_id": cid,
+                    "n_patches": int(mask.sum()),
+                    "gt_tumour_pct": round(gt_tumour_pct, 1),
+                })
+        
+        n_tissue_tumour = int(tissue_true_labels.sum())
+        n_tissue_other = int((tissue_true_labels == 0).sum())
+        
+        tissue_result = {
+            "tissue": tissue,
+            "n_patches": int(tissue_mask.sum()),
+            "n_tumour": n_tissue_tumour,
+            "n_other": n_tissue_other,
+            "tumour_pct": round(n_tissue_tumour / len(tissue_true_labels) * 100, 1),
+            "metrics": tissue_metrics,
+            "cluster_breakdown": cluster_breakdown,
+        }
+        tissue_results.append(tissue_result)
+        
+        print(f"\n  Tissue: {tissue}")
+        print(f"    Patches: {tissue_mask.sum()} | Tumour: {n_tissue_tumour} | Other: {n_tissue_other}")
+        print(f"    Accuracy: {tissue_metrics['accuracy']:.3f} | Precision: {tissue_metrics['precision']:.3f} | Recall: {tissue_metrics['recall']:.3f}")
+        for cb in cluster_breakdown:
+            print(f"      Cluster {cb['cluster_id']}: {cb['n_patches']} patches | {cb['gt_tumour_pct']}% tumour GT")
 
     # ------------------------------------------------------ save summary
     summary = {
@@ -115,13 +162,14 @@ def run(config_path: str | Path) -> None:
         "n_patches":       int(len(manifest)),
         "n_tumour_gt":     n_tumour,
         "n_other_gt":      n_other,
-        "metrics":         metrics,
+        "metrics_overall": metrics,
         "cluster_summary": cluster_summary,
+        "tissue_results":  tissue_results,
     }
     summary_path = out_dir / "summary.json"
     with open(summary_path, "w") as f:
         json.dump(summary, f, indent=2)
-    print(f"[H1 exp02] Done -- summary saved -> {summary_path}")
+    print(f"\n[H1 exp02] Done -- summary saved -> {summary_path}")
 
 
 if __name__ == "__main__":

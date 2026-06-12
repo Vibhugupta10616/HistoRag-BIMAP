@@ -133,7 +133,7 @@ def load_encoder(
         if sites is not None and site not in sites:
             continue
 
-        slide_id = _normalize_slide_id(h5_path.stem)
+        slide_id = h5_path.stem
         emb, x_coords, y_coords = _read_h5(h5_path)
 
         emb_parts.append(emb)
@@ -169,23 +169,7 @@ def available_sites(encoder: str, embeddings_root: str | Path) -> list[str]:
     return sorted({site for _, site in h5_paths})
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
 
-_DOUBLE_PREFIX = "PrimaryTumor_HE_PrimaryTumor_HE_"
-_SINGLE_PREFIX = "PrimaryTumor_HE_"
-
-def _normalize_slide_id(stem: str) -> str:
-    """Fix doubled prefix in CLIP/CONCH Larynx filenames.
-
-    Some files are named PrimaryTumor_HE_PrimaryTumor_HE_002 instead of
-    PrimaryTumor_HE_002. Strip the duplicate so slide_ids are consistent
-    across all sites and encoders.
-    """
-    if stem.startswith(_DOUBLE_PREFIX):
-        return _SINGLE_PREFIX + stem[len(_DOUBLE_PREFIX):]
-    return stem
 
 
 def _discover_h5_files(

@@ -17,7 +17,7 @@ inputs:
 
   # Directory containing one <slide_id>.geojson per slide (QuPath tumour annotations).
   # Download from HANCOCK dataset. Leave blank until available.
-  geojson_dir: data/raw/annotations/
+  geojson_dir: WSI_PrimaryTumor_Annotations/
 
 params:
   n_clusters: 2        # k=2: dominant-axis test
