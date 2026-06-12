@@ -80,8 +80,8 @@ def _read_h5(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         elif "embeddings" in keys:
             # CLIP / CONCH schema
             embeddings = np.array(hf["embeddings"], dtype=np.float32)
-            x = np.array(hf["x"], dtype=np.int32)
-            y = np.array(hf["y"], dtype=np.int32)
+            x = np.array(hf["x"], dtype=np.int32) if "x" in keys else np.zeros(len(embeddings), dtype=np.int32)
+            y = np.array(hf["y"], dtype=np.int32) if "y" in keys else np.zeros(len(embeddings), dtype=np.int32)
         else:
             raise KeyError(
                 f"Unrecognised h5 schema in {path}. "
@@ -167,6 +167,44 @@ def available_sites(encoder: str, embeddings_root: str | Path) -> list[str]:
     """Return sorted list of canonical site names available for an encoder."""
     h5_paths = _discover_h5_files(encoder, Path(embeddings_root))
     return sorted({site for _, site in h5_paths})
+
+
+def iter_encoder(
+    encoder: str,
+    embeddings_root: str | Path,
+    sites: list[str] | None = None,
+):
+    """
+    Yield (embeddings, manifest_df) one slide at a time.
+
+    Memory-efficient alternative to load_encoder — never holds more than one
+    slide's embeddings in RAM simultaneously.  Use when the full dataset does
+    not fit in memory.
+
+    Yields:
+        embeddings:   (N_patches, dim) float32 for the slide
+        manifest_df:  DataFrame with columns slide_id, site, x, y for the slide
+    """
+    embeddings_root = Path(embeddings_root)
+    h5_paths = _discover_h5_files(encoder, embeddings_root)
+
+    if not h5_paths:
+        raise FileNotFoundError(
+            f"No h5 files found for encoder '{encoder}' under {embeddings_root}."
+        )
+
+    for h5_path, site in sorted(h5_paths, key=lambda t: (t[1], t[0].name)):
+        if sites is not None and site not in sites:
+            continue
+        slide_id = h5_path.stem
+        emb, x_coords, y_coords = _read_h5(h5_path)
+        df = pd.DataFrame({
+            "slide_id": slide_id,
+            "site":     site,
+            "x":        x_coords,
+            "y":        y_coords,
+        })
+        yield emb, df
 
 
 

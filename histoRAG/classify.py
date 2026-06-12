@@ -52,6 +52,24 @@ def cluster_embeddings(
     return km.fit_predict(embeddings).astype(np.int32)
 
 
+def fit_kmeans(
+    sample_embeddings: np.ndarray,
+    n_clusters: int = 2,
+    random_state: int = 42,
+    n_init: int = 10,
+):
+    """
+    Fit KMeans on a subsample and return the fitted model.
+
+    Use km.predict(chunk) to assign cluster IDs to arbitrary batches without
+    holding all embeddings in memory at once.
+    """
+    from sklearn.cluster import KMeans as _KMeans
+    km = _KMeans(n_clusters=n_clusters, random_state=random_state, n_init=n_init)
+    km.fit(sample_embeddings)
+    return km
+
+
 def match_clusters_to_labels(
     cluster_ids: np.ndarray,
     true_labels: np.ndarray,
@@ -78,7 +96,7 @@ def match_clusters_to_labels(
     cluster_to_label = {}
     for cid in unique_clusters:
         mask = cluster_ids == cid
-        majority_vote = int(np.round(true_labels[mask].mean()))
+        majority_vote = int(true_labels[mask].mean() >= 0.5)
         cluster_to_label[cid] = majority_vote
     
     # Vectorized assignment
@@ -187,7 +205,7 @@ def grouped_metrics(
 
     rows = []
     for group_value, group in manifest.groupby(group_col, sort=True):
-        idx = group.index.to_numpy()
+        idx = manifest.index.get_indexer(group.index)
         metrics = classification_metrics(true_labels[idx], predicted_labels[idx])
 
         if group_col == "slide_id":
