@@ -1,63 +1,124 @@
-# Tests (local only, not tracked)
-tests/
-
-# Virtualenv
-bimap/
+# ============================================================================
+# ENVIRONMENT & VIRTUALENV
+# ============================================================================
 .venv/
+venv/
+env/
+.bimap/
+bimap/
 
-# Data (large files, not for git)
+# ============================================================================
+# DATA & LARGE FILES
+# ============================================================================
 data/
+*.svs
+*.wsi
+*.h5
+*.hdf5
 
-# Generated outputs
-graphify-out/
-experiments/experiments.csv
-configs/runs/
-
-# Python
+# ============================================================================
+# PYTHON
+# ============================================================================
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 *.egg-info/
+*.egg
 dist/
 build/
 .eggs/
+.pytest_cache/
+.coverage
+htmlcov/
+*.pyc
+*.pyd
 
-# ML artifacts
+# ============================================================================
+# ML ARTIFACTS & MODELS
+# ============================================================================
 *.pt
 *.pth
 *.bin
 *.safetensors
 *.faiss
 *.npy
+*.pkl
+*.pickle
+models/
+checkpoints/
 
-# Jupyter
+# ============================================================================
+# PROJECT-SPECIFIC OUTPUTS
+# ============================================================================
+# MVP pipeline outputs
+MVP/results/
+MVP/outputs/
+MVP/runs/
+
+# Hypothesis experiments outputs (re-generated on each run)
+hypotheses/**/exp**/outputs/
+hypotheses/**/outputs/
+
+# General outputs
+outputs/
+experiments/
+graphify-out/
+.code-review-graph/
+
+# ============================================================================
+# JUPYTER & NOTEBOOKS
+# ============================================================================
 .ipynb_checkpoints/
 *.ipynb
 
-# IDE / OS
+# ============================================================================
+# IDE & EDITOR
+# ============================================================================
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+.vim/
+*.sublime-project
+*.sublime-workspace
+.project
+.pydevproject
+
+# ============================================================================
+# OS SPECIFIC
+# ============================================================================
 .DS_Store
 Thumbs.db
+desktop.ini
 *.stackdump
-*.swp
+$RECYCLE.BIN/
 
-# Claude / code-review tooling
+# ============================================================================
+# CLAUDE / CODE REVIEW TOOLING
+# ============================================================================
 .claude/
 CLAUDE.md
 .code-review-graph/
 
-# Utility scripts (local preprocessing, not part of pipeline)
-svs_to_png/
-
-# Hypothesis experiment outputs (plots re-generated on each run)
-hypotheses/**/outputs/*.png
-hypotheses/**/outputs/*.npy
-
-# Streamlit runtime logs
+# ============================================================================
+# STREAMLIT
+# ============================================================================
+.streamlit/secrets.toml
+.streamlit/cache/
 streamlit_out.txt
 streamlit_err.txt
 
-# Streamlit local config (theme committed, secrets are not)
-.streamlit/secrets.toml
+# ============================================================================
+# LOCAL SCRIPTS & UTILITIES
+# ============================================================================
+svs_to_png/
+
+# ============================================================================
+# TEST & DEBUGGING
+# ============================================================================
+.pytest/
+*.log
+debug/
+logs/
