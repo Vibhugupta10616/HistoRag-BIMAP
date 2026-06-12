@@ -8,8 +8,8 @@
 #   Ctrl+A then D  (detach)
 
 # ── CONFIGURE HERE ────────────────────────────────────────────────────────────
-TISSUE="Hypopharynx"   # Larynx | Hypopharynx | Oral_Cavity | Oropharynx1 | Oropharynx2
-ENCODER="clip"         # clip | conch
+TISSUE="Hypopharynx"   # CHANGE: tissue being downloaded (Larynx | Hypopharynx | Oral_Cavity | Oropharynx1 | Oropharynx2)
+ENCODER="clip"         # CHANGE: embedding model to use when submitting embed_job.sh (clip | conch)
 # ─────────────────────────────────────────────────────────────────────────────
 
 TISSUE_LOWER=$(echo "$TISSUE" | tr '[:upper:]' '[:lower:]')

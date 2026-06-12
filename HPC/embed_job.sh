@@ -14,8 +14,8 @@ set -e
 log() { echo "[$(date +%H:%M:%S)] $1"; }
 
 # ── CONFIGURE HERE ────────────────────────────────────────────────────────────
-TISSUE="Larynx"       # Larynx | Hypopharynx | Oral_Cavity | Oropharynx1 | Oropharynx2
-ENCODER="clip"        # clip | conch
+TISSUE="Larynx"       # CHANGE: tissue to process (Larynx | Hypopharynx | Oral_Cavity | Oropharynx1 | Oropharynx2)
+ENCODER="clip"        # CHANGE: embedding model to use (clip | conch)
 # ─────────────────────────────────────────────────────────────────────────────
 
 TISSUE_LOWER=$(echo "$TISSUE" | tr '[:upper:]' '[:lower:]')

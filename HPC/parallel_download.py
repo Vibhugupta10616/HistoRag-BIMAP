@@ -25,9 +25,9 @@ import time
 import json
 
 # ── CONFIGURE HERE ────────────────────────────────────────────────────────────
-URL           = "https://data.fau.de/public/24/87/322108724/WSI_PrimaryTumor_Oropharynx_Part2.zip"
-TISSUE_LOWER  = "oropharynx2"
-EXPECTED_SIZE = 528375773776
+URL           = "https://data.fau.de/public/24/87/322108724/WSI_PrimaryTumor_Oropharynx_Part2.zip"  # CHANGE: FAU download URL for the target tissue zip
+TISSUE_LOWER  = "oropharynx2"   # CHANGE: lowercase tissue name (larynx | hypopharynx | oral_cavity | oropharynx1 | oropharynx2)
+EXPECTED_SIZE = 528375773776    # CHANGE: exact byte size of the zip (see docstring above for all tissue sizes)
 # ─────────────────────────────────────────────────────────────────────────────
 
 output     = os.environ["WORK"] + f"/hancock/{TISSUE_LOWER}/zips/" + os.path.basename(URL)

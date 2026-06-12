@@ -15,8 +15,8 @@ set -e
 log() { echo "[$(date +%H:%M:%S)] $1"; }
 
 # ── CONFIGURE HERE ────────────────────────────────────────────────────────────
-TISSUE="Hypopharynx"  # Larynx | Hypopharynx | Oral_Cavity | Oropharynx1 | Oropharynx2
-ENCODER="conch"       # clip | conch
+TISSUE="Hypopharynx"  # CHANGE: tissue to process (Larynx | Hypopharynx | Oral_Cavity | Oropharynx1 | Oropharynx2)
+ENCODER="conch"       # CHANGE: embedding model to use (clip | conch) — use batch_size 256 for 10-11 GB VRAM GPUs
 # ─────────────────────────────────────────────────────────────────────────────
 
 TISSUE_LOWER=$(echo "$TISSUE" | tr '[:upper:]' '[:lower:]')
