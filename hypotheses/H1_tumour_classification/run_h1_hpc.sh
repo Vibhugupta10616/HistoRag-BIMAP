@@ -15,15 +15,15 @@
 
 # ── SLURM directives ─────────────────────────────────────────────────────────
 #SBATCH --job-name=h1_full
-#SBATCH --partition=singlenode          # CHANGE: CPU/high-mem partition name
+#SBATCH --partition=work
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=64G                       # CLIP/CONCH: ~17 GB array; k=8 needs headroom
 #SBATCH --time=08:00:00
 #SBATCH --output=%x_%j.log             # e.g. h1_full_1234567.log
 
 # ── CHANGE: paths specific to your HPC account ───────────────────────────────
-REPO="$HOME/HistoRag-BIMAP"                           # cloned repo location
-VENV="$REPO/HPC/hpcenv"                               # virtualenv created during HPC setup
+REPO="/home/hpc/vlbi/vlbi113v/HistoRag-BIMAP"          # cloned repo location
+VENV="$REPO/hpcenv"                                   # virtualenv created during HPC setup
 EMB="$WORK/hancock/embeddings"                         # uploaded embeddings root (CLIP/, CONCH/, UNI/)
 GEO="$WORK/hancock/WSI_PrimaryTumor_Annotations"      # uploaded geojson annotations dir
 # ─────────────────────────────────────────────────────────────────────────────
