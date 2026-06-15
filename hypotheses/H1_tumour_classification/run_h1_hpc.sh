@@ -16,6 +16,7 @@
 # ── SLURM directives ─────────────────────────────────────────────────────────
 #SBATCH --job-name=h1_full
 #SBATCH --partition=work
+#SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=64G                       # CLIP/CONCH: ~17 GB array; k=8 needs headroom
 #SBATCH --time=08:00:00
