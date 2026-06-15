@@ -1,0 +1,11 @@
+# Extra dependencies for H1 hypothesis experiments on HPC.
+# These are NOT in HPC/requirements.txt (which only covers the embedding stage).
+#
+# Install:
+#   pip install -r hypotheses/H1_tumour_classification/requirements_hpc_h1.txt
+#
+# Or let run_h1_hpc.sh install them automatically at job start.
+
+scikit-learn==1.8.0
+pyyaml==6.0.3
+matplotlib==3.10.9

@@ -70,6 +70,44 @@ def fit_kmeans(
     return km
 
 
+def fit_minibatch_kmeans(
+    embeddings: np.ndarray,
+    n_clusters: int = 2,
+    random_state: int = 42,
+    batch_size: int = 10_000,
+    n_init: int = 3,
+    max_iter: int = 300,
+):
+    """
+    Fit MiniBatchKMeans on the full embedding array and return the fitted model.
+
+    Processes the full dataset in mini-batches — near-identical cluster quality
+    to standard KMeans but substantially faster and with lower peak RAM.
+    Suitable for fitting on all patches (8M+) on an HPC node.
+
+    Args:
+        embeddings:   (N, dim) float32 — the FULL patch embedding array.
+        n_clusters:   number of clusters (2 for exp01, 8 for exp02).
+        random_state: seed for reproducibility.
+        batch_size:   patches per mini-batch update. Default 10,000.
+        n_init:       number of initializations. Default 3.
+        max_iter:     max passes over the data. Default 300.
+
+    Returns:
+        Fitted MiniBatchKMeans model. Call .predict(embeddings) to assign IDs.
+    """
+    from sklearn.cluster import MiniBatchKMeans
+    mbk = MiniBatchKMeans(
+        n_clusters=n_clusters,
+        random_state=random_state,
+        batch_size=batch_size,
+        n_init=n_init,
+        max_iter=max_iter,
+    )
+    mbk.fit(embeddings)
+    return mbk
+
+
 def match_clusters_to_labels(
     cluster_ids: np.ndarray,
     true_labels: np.ndarray,
