@@ -169,6 +169,59 @@ def available_sites(encoder: str, embeddings_root: str | Path) -> list[str]:
     return sorted({site for _, site in h5_paths})
 
 
+def detect_patch_size(encoder: str, embeddings_root: str | Path) -> int:
+    """
+    Infer the patch size (in WSI level-0 pixels) from coordinate step patterns.
+
+    Reads a single h5 file and computes the most common distance between
+    consecutive unique x-coordinates. For non-overlapping tiles this equals
+    the patch width at the base WSI resolution.
+
+    Returns the detected patch size as an int.
+    """
+    embeddings_root = Path(embeddings_root)
+    h5_paths = _discover_h5_files(encoder, embeddings_root)
+    if not h5_paths:
+        raise FileNotFoundError(f"No h5 files found for encoder '{encoder}'")
+
+    h5_path = sorted(h5_paths, key=lambda t: t[0].name)[0][0]
+    with h5py.File(h5_path, "r") as hf:
+        if "coords" in hf:
+            x = np.sort(np.unique(np.array(hf["coords"])[:, 0]))
+        else:
+            x = np.sort(np.unique(np.array(hf["x"])))
+
+    steps = np.diff(x).astype(int)
+    if len(steps) == 0:
+        return 256
+    patch_size = int(np.bincount(steps).argmax())
+    return patch_size
+
+
+def count_encoder_patches(
+    encoder: str,
+    embeddings_root: str | Path,
+    sites: list[str] | None = None,
+) -> dict[str, int]:
+    """
+    Return {slide_id: n_patches} by reading only h5 dataset shapes.
+
+    No embedding data is loaded — this is fast and uses negligible RAM.
+    Use this to compute proportional subsample quotas before loading.
+    """
+    embeddings_root = Path(embeddings_root)
+    h5_paths = _discover_h5_files(encoder, embeddings_root)
+
+    counts: dict[str, int] = {}
+    for h5_path, site in sorted(h5_paths, key=lambda t: (t[1], t[0].name)):
+        if sites is not None and site not in sites:
+            continue
+        with h5py.File(h5_path, "r") as hf:
+            key = "features" if "features" in hf else "embeddings"
+            counts[h5_path.stem] = hf[key].shape[0]
+    return counts
+
+
 def iter_encoder(
     encoder: str,
     embeddings_root: str | Path,

@@ -57,13 +57,13 @@ MVP/results/
 MVP/outputs/
 MVP/runs/
 
-# Hypothesis experiments outputs (re-generated on each run)
-hypotheses/**/exp**/outputs/
-hypotheses/**/outputs/
+# Hypothesis experiments outputs — tracked in git (results are versioned)
+!hypotheses/**/outputs/
+!hypotheses/**/outputs/**
 
-# General outputs
-outputs/
-experiments/
+# General outputs (root-level only)
+/outputs/
+/experiments/
 graphify-out/
 .code-review-graph/
 

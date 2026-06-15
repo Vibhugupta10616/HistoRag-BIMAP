@@ -17,11 +17,15 @@ inputs:
 
   # Directory containing one <slide_id>.geojson per slide (QuPath tumour annotations).
   # Download from HANCOCK dataset. Leave blank until available.
-  geojson_dir: WSI_PrimaryTumor_Annotations/
+  geojson_dir: D:/College/Sem_5/HistoRag-BIMAP/WSI_PrimaryTumor_Annotations
 
 params:
   n_clusters: 8        # k=8: over-cluster to recover buried tumour signal
   random_state: 42
+  subsample_target: 2_500_000
+  # patch_size: auto-detected from h5 coordinate step patterns.
+  # Override here only if auto-detection gives wrong results.
+  # Confirmed values: CLIP/CONCH = 1024, UNI = 2048.
 
 outputs:
   dir: hypotheses/H1_tumour_classification/exp02_overcluster_assign/outputs/

@@ -1,0 +1,11 @@
+{
+  "experiment": "H1_exp02_overcluster_assign",
+  "n_clusters": 8,
+  "n_patches": 800,
+  "n_tumour_gt": 420,
+  "metrics": {
+    "accuracy": 0.825,
+    "precision": 0.85,
+    "recall": 0.8095238095238095
+  }
+}

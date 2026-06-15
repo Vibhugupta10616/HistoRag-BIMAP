@@ -91,13 +91,16 @@ def match_clusters_to_labels(
     true_labels  = np.asarray(true_labels,  dtype=np.int32)
     predicted    = np.zeros_like(cluster_ids, dtype=np.int32)
 
-    # Pre-compute majority label per cluster for efficiency
+    # Use global tumour prevalence as threshold — a cluster is "tumour" if its
+    # tumour fraction exceeds the overall rate. This works even when tumour is a
+    # minority class (< 50% globally), where a fixed 0.5 threshold would label
+    # every cluster "other" and produce precision=recall=0.
+    global_tumour_rate = true_labels.mean()
     unique_clusters = np.unique(cluster_ids)
     cluster_to_label = {}
     for cid in unique_clusters:
         mask = cluster_ids == cid
-        majority_vote = int(true_labels[mask].mean() >= 0.5)
-        cluster_to_label[cid] = majority_vote
+        cluster_to_label[cid] = int(true_labels[mask].mean() > global_tumour_rate)
     
     # Vectorized assignment
     for cid, label in cluster_to_label.items():
@@ -171,6 +174,7 @@ def cluster_summary(cluster_ids: np.ndarray, true_labels: np.ndarray) -> pd.Data
     cluster_ids = np.asarray(cluster_ids, dtype=np.int32)
     true_labels = np.asarray(true_labels, dtype=np.int32)
 
+    global_tumour_rate = true_labels.mean() * 100
     rows = []
     for cid in sorted(np.unique(cluster_ids).tolist()):
         mask = cluster_ids == cid
@@ -179,7 +183,7 @@ def cluster_summary(cluster_ids: np.ndarray, true_labels: np.ndarray) -> pd.Data
             "cluster": cid,
             "patches": int(mask.sum()),
             "geojson_tumour_pct": round(tumour_pct, 2),
-            "assigned_label": "tumour" if tumour_pct >= 50 else "other",
+            "assigned_label": "tumour" if tumour_pct > global_tumour_rate else "other",
         })
 
     return pd.DataFrame(rows)

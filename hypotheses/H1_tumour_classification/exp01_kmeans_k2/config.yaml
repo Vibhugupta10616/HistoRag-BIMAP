@@ -22,6 +22,10 @@ inputs:
 params:
   n_clusters: 2        # k=2: dominant-axis test
   random_state: 42
+  subsample_target: 2_500_000
+  # patch_size: auto-detected from h5 coordinate step patterns.
+  # Override here only if auto-detection gives wrong results.
+  # Confirmed values: CLIP/CONCH = 1024, UNI = 2048.
 
 outputs:
   dir: hypotheses/H1_tumour_classification/exp01_kmeans_k2/outputs/
