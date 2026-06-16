@@ -96,7 +96,7 @@ def run(
 
         print(f"[H1 exp02] {manifest['slide_id'].nunique()} slides | "
               f"{total_patches:,} patches | dim={emb_dim} | "
-              f"≈{total_patches * emb_dim * 4 / 1e9:.1f} GB")
+              f"~{total_patches * emb_dim * 4 / 1e9:.1f} GB")
         print(f"[H1 exp02] Fitting MiniBatchKMeans k={n_clusters} on all {total_patches:,} patches...")
         km          = fit_minibatch_kmeans(all_emb, n_clusters=n_clusters, random_state=random_state)
         cluster_ids = km.predict(all_emb).astype(np.int32)
@@ -131,7 +131,7 @@ def run(
         actual_sample = len(sample_emb)
         emb_dim       = sample_emb.shape[1]
         print(f"[H1 exp02] Fitting KMeans k={n_clusters} on {actual_sample:,} patches "
-              f"(dim={emb_dim}, ≈{actual_sample * emb_dim * 4 / 1e9:.2f} GB)")
+              f"(dim={emb_dim}, ~{actual_sample * emb_dim * 4 / 1e9:.2f} GB)")
         km = fit_kmeans(sample_emb, n_clusters=n_clusters, random_state=random_state, n_init=3)
         del sample_emb
 

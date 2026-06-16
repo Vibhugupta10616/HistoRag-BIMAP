@@ -15,12 +15,11 @@
 
 # ── SLURM directives ─────────────────────────────────────────────────────────
 #SBATCH --job-name=h1_full
-#SBATCH --partition=work
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=32
-#SBATCH --mem=64G                       # CLIP/CONCH: ~17 GB array; k=8 needs headroom
-#SBATCH --time=08:00:00
+#SBATCH --cpus-per-task=8
+#SBATCH --time=05:00:00
 #SBATCH --output=%x_%j.log             # e.g. h1_full_1234567.log
+#SBATCH --partition=a100
+#SBATCH --gres=gpu:a100:1
 
 # ── CHANGE: paths specific to your HPC account ───────────────────────────────
 REPO="/home/hpc/vlbi/vlbi113v/HistoRag-BIMAP"          # cloned repo location
@@ -39,9 +38,6 @@ echo "=========================================="
 module load python/pytorch2.6py3.12          # CHANGE: match your cluster's Python module
 
 source "$VENV/bin/activate"
-
-# Install H1-specific deps missing from HPC/requirements.txt (fast if cached)
-pip install --quiet -r "$REPO/hypotheses/H1_tumour_classification/requirements_hpc_h1.txt"
 
 # Let sklearn use all allocated CPUs
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK

@@ -1,6 +1,7 @@
 {
   "experiment": "H1_exp01_kmeans_k2",
   "encoder": "clip-vitb16",
+  "fit_mode": "subsample_kmeans",
   "patch_size": 1024,
   "n_clusters": 2,
   "n_patches": 8212546,

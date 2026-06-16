@@ -51,15 +51,33 @@ def tumour_labels_from_geojson(
         values are 'tumour' or 'other'.
     """
     geojson_dir = Path(geojson_dir)
+
+    # Build a flat index {slide_id: path} by scanning recursively.
+    # This handles both flat layouts (local: geojson_dir/*.geojson) and
+    # nested layouts (HPC: geojson_dir/<subdir>/*.geojson).
+    geojson_index: dict[str, Path] = {
+        p.stem: p for p in geojson_dir.rglob("*.geojson")
+    }
+    n_slides = manifest["slide_id"].nunique()
+    missing = [sid for sid in manifest["slide_id"].unique() if sid not in geojson_index]
+    print(f"[labels] Geojson index: {len(geojson_index)} files found under {geojson_dir}")
+    if missing:
+        print(f"[labels] Warning: {len(missing)}/{n_slides} slides have no geojson "
+              f"— those patches will be labeled 'other'. First missing: {missing[:3]}")
+    if len(missing) == n_slides:
+        raise FileNotFoundError(
+            f"No geojson files matched any of the {n_slides} slides.\n"
+            f"  Slide IDs (first 3): {list(manifest['slide_id'].unique())[:3]}\n"
+            f"  Geojson files found (first 3): {list(geojson_index.keys())[:3]}\n"
+            f"  Searched under: {geojson_dir}\n"
+            "Check that geojson_dir is correct and files are named <slide_id>.geojson."
+        )
+
     labels = pd.Series("other", index=manifest.index, dtype=str)
 
     for slide_id, group in manifest.groupby("slide_id"):
-        geojson_path = geojson_dir / f"{slide_id}.geojson"
-        if not geojson_path.exists():
-            print(
-                f"[labels] Warning: no annotation file for slide '{slide_id}' "
-                f"({geojson_path}). All its patches marked 'other'."
-            )
+        geojson_path = geojson_index.get(slide_id)
+        if geojson_path is None:
             continue
 
         polygons = _load_tumour_polygons(geojson_path)
