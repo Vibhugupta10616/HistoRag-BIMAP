@@ -284,33 +284,59 @@ def grouped_metrics(
 # ---------------------------------------------------------------------------
 
 def explain_dimensions(
-    cluster_ids: np.ndarray,
     embeddings: np.ndarray,
     true_labels: np.ndarray,
+    top_k: int = 20,
 ) -> dict:
     """
     Identify which embedding dimensions most separate tumour from other patches.
 
-    [STUB] XAI strategy deferred until clustering results are available.
-
-    Planned approach (centroid difference):
-      - Compute mean embedding of all tumour-assigned patches (centroid_tumour).
-      - Compute mean embedding of all other-assigned patches (centroid_other).
-      - Rank dimensions by |centroid_tumour - centroid_other|.
-      - Top dimensions are what separates tumour in this encoder's space.
+    Uses centroid-difference ranking: for each dimension, compute the absolute
+    difference between the tumour-patch mean and the other-patch mean, normalised
+    by the pooled standard deviation (Cohen's d effect size). Dimensions with the
+    largest effect size are the most tumour-discriminative axes in this encoder.
 
     Args:
-        cluster_ids:  (N,) cluster assignments from cluster_embeddings().
-        embeddings:   (N, dim) float32 patch embeddings.
-        true_labels:  (N,) int ground-truth labels for reference.
+        embeddings:  (N, dim) float32 — patch embeddings (full dataset).
+        true_labels: (N,) int — ground-truth labels: 1 = tumour, 0 = other.
+        top_k:       number of top dimensions to return.
 
     Returns:
-        dict mapping dimension index (int) -> importance score (float)
-
-    Raises:
-        NotImplementedError: always, until implemented after results review.
+        dict with keys:
+          top_dims         — list[int] of top_k dimension indices (ranked)
+          effect_sizes     — list[float] Cohen's d per top dimension
+          tumour_centroid  — list[float] mean embedding of tumour patches (all dims)
+          other_centroid   — list[float] mean embedding of other patches (all dims)
+          n_tumour         — int number of tumour patches
+          n_other          — int number of other patches
     """
-    raise NotImplementedError(
-        "XAI not yet implemented — strategy to be decided after clustering results. "
-        "Planned: centroid-difference ranking (|tumour_centroid - other_centroid| per dim)."
-    )
+    embeddings  = np.asarray(embeddings,  dtype=np.float32)
+    true_labels = np.asarray(true_labels, dtype=np.int32)
+
+    tumour_mask = true_labels == 1
+    other_mask  = true_labels == 0
+
+    emb_tumour = embeddings[tumour_mask]
+    emb_other  = embeddings[other_mask]
+
+    mu_t = emb_tumour.mean(axis=0)   # (dim,)
+    mu_o = emb_other.mean(axis=0)    # (dim,)
+
+    # Pooled std — adds small epsilon to avoid division by zero
+    n_t, n_o = len(emb_tumour), len(emb_other)
+    var_t = emb_tumour.var(axis=0)
+    var_o = emb_other.var(axis=0)
+    pooled_std = np.sqrt((var_t * n_t + var_o * n_o) / (n_t + n_o)) + 1e-8
+
+    effect_size = np.abs(mu_t - mu_o) / pooled_std   # Cohen's d per dimension
+
+    top_idx = np.argsort(effect_size)[::-1][:top_k]
+
+    return {
+        "top_dims":        top_idx.tolist(),
+        "effect_sizes":    effect_size[top_idx].tolist(),
+        "tumour_centroid": mu_t.tolist(),
+        "other_centroid":  mu_o.tolist(),
+        "n_tumour":        int(n_t),
+        "n_other":         int(n_o),
+    }

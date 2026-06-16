@@ -51,6 +51,7 @@ from histoRAG.classify import (
     fit_minibatch_kmeans,
     match_clusters_to_labels,
     classification_metrics,
+    explain_dimensions,
 )
 
 
@@ -100,11 +101,15 @@ def run(
         print(f"[H1 exp02] Fitting MiniBatchKMeans k={n_clusters} on all {total_patches:,} patches...")
         km          = fit_minibatch_kmeans(all_emb, n_clusters=n_clusters, random_state=random_state)
         cluster_ids = km.predict(all_emb).astype(np.int32)
-        del all_emb
 
         print(f"[H1 exp02] Deriving GeoJSON tumour/other labels (all slides)...")
         tumour_lbl  = tumour_labels_from_geojson(manifest, geojson_dir, patch_size=patch_size)
         true_labels = (tumour_lbl == "tumour").astype(int).values
+
+        print(f"[H1 exp02] Computing XAI — dimension importance (centroid difference)...")
+        xai_result = explain_dimensions(all_emb, true_labels, top_k=20)
+        print(f"[H1 exp02] Top-5 tumour-discriminative dims: {xai_result['top_dims'][:5]}")
+        del all_emb
         fit_mode    = "full_minibatch"
 
     else:
@@ -154,6 +159,7 @@ def run(
         true_labels = np.concatenate(all_true_labels)
         manifest    = pd.concat(manifest_parts, ignore_index=True)
         fit_mode    = "subsample_kmeans"
+        xai_result  = None  # XAI requires all embeddings in memory; use --full mode
 
     n_tumour = int(true_labels.sum())
     n_other  = int((true_labels == 0).sum())
@@ -270,6 +276,7 @@ def run(
         "cluster_summary": cluster_summary,
         "tissue_results":  tissue_results,
         "wsi_results":     wsi_results,
+        "xai":             xai_result,
     }
     summary_path = out_dir / f"summary_{encoder}.json"
     with open(summary_path, "w") as f:
