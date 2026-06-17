@@ -128,7 +128,96 @@ patches cluster by shared biology rather than anatomical site.
 
 ## Exp02 — Tumour Similarity Results (Q2)
 
-*To be run — see `exp02_tumour_similarity/run.py`.*
+**Dataset:** 708 patients, tumour patches only (streamed per slide, variable rate per slide).
+
+| Encoder | Total patches scanned | Tumour patches | Overall tumour % | Aggregation |
+|---|---|---|---|---|
+| CONCH | 8,212,546 | 415,398 | 5.1% | patient (median 310 patches/pt) |
+| UNI | 2,076,207 | 103,812 | 5.0% | patient (median 78 patches/pt) |
+
+Aggregation mode was `patient` for both — median tumour patches per patient well above the
+threshold of 20, so each patient is represented by a mean-pooled tumour embedding.
+
+---
+
+### UMAP (50k subsampled tumour patches)
+
+#### CONCH
+
+The large central mass is heavily mixed across all four sites with no clean spatial
+separation. Oral cavity (green) has a noticeably higher density in the upper-left region,
+suggesting some oral cavity tumour patches retain site-specific features even within tumour
+space. A small isolated cluster appears far right — a handful of hypopharynx outlier points
+that look unlike the rest of the dataset. Overall the mixing is strong and close to the
+expected result.
+
+#### UNI
+
+More "exploded" structure than CONCH. The central core is densely mixed with all four sites
+overlapping, but many scattered satellite clusters radiate outward, most of them dominated
+by oropharynx (red). This reflects UNI's wider spread in 1024-dim space: typical tumour
+patches converge in the core regardless of site, while atypical or site-specific patches
+form isolated groups at the periphery. UMAP issued a "graph not fully connected" warning,
+which is expected when a high-dimensional space separates some patches too far to bridge
+into one connected neighbourhood structure.
+
+---
+
+### Correlation Heatmap
+
+| Metric | CONCH | UNI |
+|---|---|---|
+| Within-site mean | 0.717 | 0.499 |
+| Cross-site mean | 0.696 | 0.468 |
+| **Gap (within − cross)** | **0.021** | **0.030** |
+
+**Per-site within-similarity (exp02):**
+
+| Site | CONCH | UNI |
+|---|---|---|
+| hypopharynx | 0.714 | 0.473 |
+| larynx | 0.725 | 0.499 |
+| oral_cavity | **0.789** | **0.561** |
+| oropharynx | 0.702 | 0.490 |
+
+CONCH heatmap remains uniformly red with faint block structure. UNI heatmap shows
+lower absolute similarity (~0.47–0.56 vs CONCH's 0.70–0.79) and slightly more visible
+block boundaries, particularly for oral cavity. The diagonal self-similarity line is
+clearly visible in UNI due to its wider embedding spread.
+
+---
+
+### Key Finding — exp01 vs exp02 Gap Shift
+
+| | CONCH exp01 | CONCH exp02 | UNI exp01 | UNI exp02 |
+|---|---|---|---|---|
+| Input | all patches | tumour only | all patches | tumour only |
+| Within-site | 0.835 | 0.717 | 0.663 | 0.499 |
+| Cross-site | 0.819 | 0.696 | 0.621 | 0.468 |
+| **Gap** | **0.016** | **0.021** | **0.043** | **0.030** |
+
+**CONCH gap increases** (0.016 → 0.021) when filtering to tumour patches — tumour
+embeddings still carry site-specific information. Filtering to cancer tissue does not
+reduce site bias in CONCH.
+
+**UNI gap decreases** (0.043 → 0.030) when filtering to tumour patches — tumour
+embeddings become more site-agnostic. UNI encodes tumour biology more independently
+of anatomical location. This is consistent with UNI achieving the best tumour
+discrimination in H1 (F1=0.259).
+
+Oral cavity is the most self-similar site in both encoders across both experiments,
+reflecting its distinct mucosal and salivary gland tissue composition.
+
+---
+
+### Conclusion (Q2)
+
+Both encoders show strong tumour patch mixing in UMAP (hypothesis broadly supported),
+but neither achieves fully site-agnostic cancer similarity in the correlation matrix.
+UNI comes closer — its tumour space gap shrinks when filtering to cancer patches, while
+CONCH's site signal actually strengthens. For HistoRAG tumour-specific retrieval, UNI
+is the better choice: it is more likely to surface similar cancer patients regardless
+of anatomical site. CONCH retrieval in tumour space will still favour same-site patients.
 
 ---
 

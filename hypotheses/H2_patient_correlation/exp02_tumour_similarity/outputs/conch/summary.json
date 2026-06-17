@@ -1,0 +1,16 @@
+{
+  "experiment": "H2_exp02_tumour_similarity",
+  "encoder": "conch",
+  "patch_size": 1024,
+  "n_patches_total": 8212546,
+  "n_tumour_patches": 415398,
+  "tumour_pct_overall": 5.06,
+  "aggregation_mode": "patient",
+  "median_tumour_patches_per_pt": 310.5,
+  "outputs": [
+    "umap_tumour_patches_by_site.png",
+    "heatmap_tumour_similarity.png",
+    "correlation_matrix.npy",
+    "summary.json"
+  ]
+}
