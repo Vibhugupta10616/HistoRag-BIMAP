@@ -215,6 +215,18 @@ def plot_heatmap(
     ax.set_title(title, fontsize=12)
     ax.set_xlabel("Patients")
     ax.set_ylabel("Patients")
+
+    # suppress individual tick labels when N is too large to read
+    n = matrix.shape[0]
+    if n > 40:
+        ax.set_xticks([])
+        ax.set_yticks([])
+    else:
+        ax.set_xticks(range(n))
+        ax.set_xticklabels(group_labels, rotation=90, fontsize=6)
+        ax.set_yticks(range(n))
+        ax.set_yticklabels(group_labels, fontsize=6)
+
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)

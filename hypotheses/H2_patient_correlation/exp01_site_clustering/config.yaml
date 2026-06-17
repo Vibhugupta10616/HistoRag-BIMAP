@@ -7,8 +7,8 @@ experiment:
     Compute UMAP and patient-patient correlation matrix.
     Expected result: clusters by anatomical site and a block-diagonal heatmap.
 
-# Encoder whose embeddings to use. One of: clip-vitb16 | conch | uni2h
-encoder: clip-vitb16
+# Encoder whose embeddings to use. One of: conch | uni2h
+encoder: conch
 
 inputs:
   # Root directory containing all unzipped encoder folders (CLIP/, CONCH/, UNI/).

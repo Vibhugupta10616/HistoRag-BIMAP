@@ -2,18 +2,18 @@
 H2 Experiment 01 — Site Clustering (Q1)
 
 Pipeline:
-    1. Load all patch embeddings for the configured encoder via histoRAG.loader
-       (reads directly from h5 files under embeddings_root)
-    2. Site labels come from the loader manifest — no clinical CSV needed
-    3. Aggregate patches per patient: mean pool -> 1 vector/patient
-    4. UMAP — 2-D scatter of patient vectors coloured by anatomical site
+    1. Stream patch embeddings slide by slide via histoRAG.loader.iter_encoder
+    2. Mean-pool each slide's patches on the fly -> 1 vector per patient
+       Peak RAM = one slide at a time + accumulated patient vectors (< 2 MB total)
+    3. UMAP — 2-D scatter of patient vectors coloured by anatomical site
        Expected: distinct clusters per site
-    5. Correlation matrix — N x N patient cosine similarity heatmap
+    4. Correlation matrix — N x N patient cosine similarity heatmap
        Expected: block-diagonal pattern (high within-site, low across-site)
-    6. Save outputs/
+    5. Save outputs/
 
 To run:
     python hypotheses/H2_patient_correlation/exp01_site_clustering/run.py
+    python hypotheses/H2_patient_correlation/exp01_site_clustering/run.py --encoder conch
 """
 
 import json
@@ -24,12 +24,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT))
 
 import numpy as np
-import pandas as pd
 import yaml
 
-from histoRAG.loader import load_encoder
+from histoRAG.loader import iter_encoder
 from histoRAG.correlate import (
-    aggregate_by_patient,
     correlation_matrix,
     compute_umap,
     plot_umap,
@@ -37,41 +35,55 @@ from histoRAG.correlate import (
 )
 
 
-def run(config_path: str | Path) -> None:
+def run(
+    config_path: str | Path,
+    encoder_override: str | None = None,
+    embeddings_root_override: str | None = None,
+) -> None:
     # ------------------------------------------------------------------ setup
     config_path = Path(config_path)
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
 
-    out_dir = Path(cfg["outputs"]["dir"])
+    encoder         = encoder_override or cfg["encoder"]
+    embeddings_root = embeddings_root_override or cfg["inputs"]["embeddings_root"]
+    out_dir         = Path(cfg["outputs"]["dir"]) / encoder
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    encoder = cfg["encoder"]
-    embeddings_root = cfg["inputs"]["embeddings_root"]
+    # ----------------------------------------- stream + mean-pool per patient
+    # Process one slide at a time; only the mean vector is kept after each slide.
+    print(f"\n[H2 exp01] encoder={encoder}")
+    print(f"[H2 exp01] Streaming slides and mean-pooling per patient...")
 
-    # -------------------------------------------------------- load embeddings
-    print(f"[H2 exp01] Loading embeddings for encoder '{encoder}' from {embeddings_root}")
-    embeddings, manifest = load_encoder(encoder, embeddings_root)
+    patient_vecs  = []
+    patient_ids   = []
+    patient_sites = []
 
-    print(f"[H2 exp01] {len(manifest)} patches | {manifest['slide_id'].nunique()} patients")
-    site_counts = dict(manifest.drop_duplicates("slide_id")["site"].value_counts())
+    for emb, slide_df in iter_encoder(encoder, embeddings_root):
+        slide_id  = slide_df["slide_id"].iloc[0]
+        site      = slide_df["site"].iloc[0]
+        mean_vec  = emb.mean(axis=0).astype(np.float32)
+        patient_vecs.append(mean_vec)
+        patient_ids.append(slide_id)
+        patient_sites.append(site)
+        print(f"  {slide_id}: {len(emb):>6,} patches | site={site}")
+
+    patient_embeddings = np.stack(patient_vecs, axis=0)
+    patient_ids        = np.array(patient_ids, dtype=str)
+    patient_sites      = np.array(patient_sites, dtype=str)
+
+    # re-normalize to unit length (mean-pooling breaks L2-normalization)
+    norms = np.linalg.norm(patient_embeddings, axis=1, keepdims=True)
+    norms = np.where(norms == 0, 1.0, norms)
+    patient_embeddings = patient_embeddings / norms
+
+    n_patients = len(patient_ids)
+    site_counts = {s: int((patient_sites == s).sum()) for s in np.unique(patient_sites)}
+    print(f"\n[H2 exp01] {n_patients} patient vectors | dim={patient_embeddings.shape[1]}")
     print(f"[H2 exp01] Patients per site: {site_counts}")
 
-    # ------------------------------------------------- aggregate per patient
-    print("[H2 exp01] Aggregating patches per patient (mean pool)...")
-    umap_params = cfg["params"].get("umap", {})
-    patient_embeddings, patient_ids = aggregate_by_patient(
-        manifest, embeddings,
-        group_col="slide_id",
-        method=cfg["params"].get("aggregation", "mean"),
-    )
-
-    # one site label per patient
-    id_to_site = manifest.drop_duplicates("slide_id").set_index("slide_id")["site"]
-    patient_sites = id_to_site.loc[patient_ids].values
-    print(f"[H2 exp01] {len(patient_ids)} patient vectors | dim={patient_embeddings.shape[1]}")
-
     # ----------------------------------------------------------------- UMAP
+    umap_params = cfg["params"].get("umap", {})
     print("[H2 exp01] Computing UMAP on patient-level embeddings...")
     umap_coords = compute_umap(
         patient_embeddings,
@@ -89,7 +101,6 @@ def run(config_path: str | Path) -> None:
     # ------------------------------------------- correlation matrix + heatmap
     print("[H2 exp01] Computing patient-patient correlation matrix...")
     corr = correlation_matrix(patient_embeddings)
-
     plot_heatmap(
         corr,
         group_labels=patient_sites,
@@ -101,11 +112,10 @@ def run(config_path: str | Path) -> None:
 
     # --------------------------------------------------------------- summary
     summary = {
-        "experiment":   cfg["experiment"]["name"],
-        "encoder":      encoder,
-        "n_patients":   int(len(patient_ids)),
-        "n_patches":    int(len(manifest)),
-        "site_counts":  {str(k): int(v) for k, v in site_counts.items()},
+        "experiment":    cfg["experiment"]["name"],
+        "encoder":       encoder,
+        "n_patients":    int(n_patients),
+        "site_counts":   site_counts,
         "embedding_dim": int(patient_embeddings.shape[1]),
         "outputs": [
             "umap_patients_by_site.png",
@@ -121,5 +131,12 @@ def run(config_path: str | Path) -> None:
 
 
 if __name__ == "__main__":
-    _config = Path(__file__).parent / "config.yaml"
-    run(_config)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default=str(Path(__file__).parent / "config.yaml"))
+    parser.add_argument("--encoder", default=None, help="Override encoder (conch | uni2h)")
+    parser.add_argument("--embeddings-root", default=None,
+                        help="Override embeddings_root from config (useful on HPC).")
+    args = parser.parse_args()
+    run(args.config, encoder_override=args.encoder,
+        embeddings_root_override=args.embeddings_root)

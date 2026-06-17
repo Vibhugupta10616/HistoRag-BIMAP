@@ -1,0 +1,18 @@
+{
+  "experiment": "H2_exp01_site_clustering",
+  "encoder": "uni2h",
+  "n_patients": 708,
+  "site_counts": {
+    "hypopharynx": 80,
+    "larynx": 182,
+    "oral_cavity": 129,
+    "oropharynx": 317
+  },
+  "embedding_dim": 1024,
+  "outputs": [
+    "umap_patients_by_site.png",
+    "heatmap_patient_correlation.png",
+    "correlation_matrix.npy",
+    "summary.json"
+  ]
+}

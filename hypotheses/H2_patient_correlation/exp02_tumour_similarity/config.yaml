@@ -8,22 +8,23 @@ experiment:
     Correlation matrix (adaptive aggregation) — expected: uniformly high similarity
     showing shared cancer histopathology across anatomical sites.
 
-# Encoder whose embeddings to use. One of: clip-vitb16 | conch | uni2h
-encoder: clip-vitb16
+# Encoder whose embeddings to use. One of: conch | uni2h
+encoder: conch
 
 inputs:
   # Root directory containing all unzipped encoder folders (CLIP/, CONCH/, UNI/).
   embeddings_root: E:/embeddings
 
-  # Directory containing one <slide_id>.geojson per slide (QuPath tumour annotations).
-  # Download from HANCOCK dataset. Leave blank until available.
-  geojson_dir: data/raw/annotations/
+  # Directory containing QuPath tumour annotation .geojson files.
+  geojson_dir: D:/College/Sem_5/HistoRag-BIMAP/WSI_PrimaryTumor_Annotations
 
 params:
   umap:
     n_neighbors: 15
     min_dist: 0.1
     random_state: 42
+    # Max tumour patches fed to UMAP (full 415k is too slow). 0 = no limit.
+    max_points: 50000
 
   # Adaptive aggregation threshold (see histoRAG/correlate.py → decide_aggregation).
   # If median tumour patches/patient >= threshold → aggregate per patient.
