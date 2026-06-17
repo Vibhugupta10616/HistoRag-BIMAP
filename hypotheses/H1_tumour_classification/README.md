@@ -106,12 +106,43 @@ Implemented in `histoRAG/classify.py → explain_dimensions`.
 3. Per dimension: `effect_size = |centroid_tumour - centroid_other| / pooled_std`
 4. Rank dimensions by effect size (Cohen's d) — higher = more tumour-discriminative
 
-**Output** (saved in `summary.json → xai`):
-- `top_dims` — top-20 dimension indices ranked by effect size
-- `effect_sizes` — Cohen's d score per top dimension
-- `tumour_centroid` / `other_centroid` — full centroid vectors for all dims
-
 XAI is computed in `--full` mode only (requires all embeddings in memory simultaneously).
+Output is saved under `summary.json → xai` with keys `top_dims`, `effect_sizes`,
+`tumour_centroid`, `other_centroid`.
+
+### XAI Results (full dataset, HPC)
+
+XAI top dims are identical between exp01 and exp02 for each encoder — correct, because
+XAI depends only on ground-truth labels vs embeddings, not on the number of clusters.
+
+| Encoder | Embedding dim | Top-5 tumour dims | Max Cohen's d | Mean top-20 d |
+|---|---|---|---|---|
+| CLIP | 512 | 301, 355, 2, 249, 349 | 0.895 | 0.777 |
+| CONCH | 512 | 122, 177, 208, 169, 432 | **1.261** | **1.100** |
+| UNI | 1024 | 593, 914, 365, 943, 905 | 1.160 | 0.912 |
+
+**Cohen's d interpretation:** d < 0.5 = small, d ~0.8 = medium, d > 1.0 = large effect.
+
+**CLIP** — max d = 0.895 (medium). No single dimension strongly separates tumour from
+other. Tumour signal is weak and diffuse across the 512 dimensions. Matches CLIP's
+poor clustering precision.
+
+**CONCH** — max d = 1.261 (large), mean top-20 d = 1.100. All top-20 dimensions exceed
+d = 1.0. CONCH has a concentrated, consistent tumour axis — specific dimensions carry
+strong and reliable tumour signal.
+
+**UNI** — max d = 1.160 (large), but mean top-20 d drops to 0.912 — the signal spreads
+more across the larger 1024-dim space. UNI achieves the best clustering F1 (0.259) not
+because one axis is sharpest, but because multiple sub-clusters collectively capture the
+buried tumour signal at k=8.
+
+### Practical implication for HistoRAG
+
+| Use case | Best choice |
+|---|---|
+| Efficient tumour-aware indexing on a few dims | **CONCH dims 122, 177, 208** (d > 1.2) |
+| Full-vector retrieval for best patch separation | **UNI** (best F1 = 0.259) |
+| Avoid | CLIP — tumour signal too diffuse for reliable retrieval |
 
 ---
 
