@@ -272,33 +272,49 @@ def plot_heatmap(
         matrix = matrix[np.ix_(sort_idx, sort_idx)]
         group_labels = group_labels[sort_idx]
 
-    # data-driven colour range — exclude self-similarity diagonal (always 1.0)
-    off_diag = matrix[~np.eye(len(matrix), dtype=bool)]
-    vmin = max(0.0, float(off_diag.min()) - 0.02)
-    vmax = 1.0
+    n_full = len(matrix)
 
-    fig, ax = plt.subplots(figsize=(10, 9))
-    im = ax.imshow(matrix, cmap="YlOrRd", vmin=vmin, vmax=vmax,
-                   aspect="auto", interpolation="nearest")
-    plt.colorbar(im, ax=ax, label="Cosine Similarity", shrink=0.8)
-
-    # white boundary lines between groups
+    # compute block boundaries on the FULL matrix (used for lines + tick positions)
     block_starts, block_ends, unique_groups = [], [], []
     start = 0
-    for i in range(1, len(group_labels)):
+    for i in range(1, n_full):
         if group_labels[i] != group_labels[i - 1]:
             block_starts.append(start)
             block_ends.append(i - 1)
             unique_groups.append(group_labels[i - 1])
-            ax.axhline(y=i - 0.5, color="white", linewidth=1.5)
-            ax.axvline(x=i - 0.5, color="white", linewidth=1.5)
             start = i
     block_starts.append(start)
-    block_ends.append(len(group_labels) - 1)
+    block_ends.append(n_full - 1)
     unique_groups.append(group_labels[-1])
 
-    # group name ticks at block midpoints on both axes
-    midpoints = [(s + e) / 2 for s, e in zip(block_starts, block_ends)]
+    # downsample matrix for display if too large (cap at 2000×2000 pixels)
+    max_display = 2000
+    if n_full > max_display:
+        step = n_full // max_display
+        display_matrix = matrix[::step, ::step]
+        scale = 1.0 / step
+        print(f"[correlate] Heatmap downsampled {n_full}→{len(display_matrix)} for rendering (step={step})")
+    else:
+        display_matrix = matrix
+        scale = 1.0
+
+    # data-driven colour range — exclude self-similarity diagonal (always 1.0)
+    off_diag = matrix[~np.eye(n_full, dtype=bool)]
+    vmin = max(0.0, float(off_diag.min()) - 0.02)
+    vmax = 1.0
+
+    fig, ax = plt.subplots(figsize=(10, 9))
+    im = ax.imshow(display_matrix, cmap="YlOrRd", vmin=vmin, vmax=vmax,
+                   aspect="auto", interpolation="nearest")
+    plt.colorbar(im, ax=ax, label="Cosine Similarity", shrink=0.8)
+
+    # boundary lines and tick positions scaled to display coordinates
+    for s, e in zip(block_starts[1:], block_ends[:-1]):
+        boundary = (e + 0.5) * scale
+        ax.axhline(y=boundary, color="white", linewidth=1.5)
+        ax.axvline(x=boundary, color="white", linewidth=1.5)
+
+    midpoints = [((s + e) / 2) * scale for s, e in zip(block_starts, block_ends)]
     ax.set_xticks(midpoints)
     ax.set_xticklabels(unique_groups, rotation=30, ha="right", fontsize=10)
     ax.set_yticks(midpoints)
@@ -309,7 +325,7 @@ def plot_heatmap(
     ax.set_ylabel(ylabel, labelpad=8)
 
     plt.tight_layout()
-    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.savefig(out_path, dpi=100, bbox_inches="tight")
     plt.close(fig)
     print(f"[correlate] Heatmap saved -> {out_path}")
 
