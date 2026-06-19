@@ -26,10 +26,13 @@ params:
     # Max tumour patches fed to UMAP (full 415k is too slow). 0 = no limit.
     max_points: 50000
 
-  # Adaptive aggregation threshold (see histoRAG/correlate.py → decide_aggregation).
-  # If median tumour patches/patient >= threshold → aggregate per patient.
-  # If median < threshold → keep individual patches.
-  aggregation_threshold: 20
+  # Centroid-nearest patch selection (no aggregation / mean-pooling).
+  # For each patient, compute tumour centroid and keep the N closest real patches.
+  n_centroid_patches: 35
+
+  # Patches sampled per site for the KDE similarity distribution plot.
+  # 4 sites × 1000 = 4k patches → ~8M pairs — tractable locally.
+  kde_sample_per_site: 1000
 
 outputs:
   dir: hypotheses/H2_patient_correlation/exp02_tumour_similarity/outputs/

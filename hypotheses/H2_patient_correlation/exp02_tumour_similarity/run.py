@@ -5,16 +5,17 @@ Pipeline:
     1. Stream patch embeddings slide by slide via histoRAG.loader.iter_encoder
     2. Derive tumour labels per slide from QuPath .geojson annotations
     3. Keep only tumour patches for that slide; discard all others immediately
-       Peak RAM = one slide at a time + accumulated tumour patches across all slides
-       (tumour prevalence varies per slide; overall ~5% of total patches)
+       Peak RAM = one slide + accumulated tumour patches across all slides (~5%)
     4. UMAP on a random subsample of tumour patches, coloured by anatomical site
        Expected: all sites are MIXED — cancer looks similar regardless of location
-    5. Adaptive aggregation:
-         median tumour patches/patient >= threshold -> aggregate per patient
-         median < threshold -> keep individual patches
-    6. Correlation matrix heatmap
+    5. Centroid-nearest patch selection (no aggregation):
+         For each patient compute tumour centroid, select N closest patches.
+         These are real data points — no mean-pooling.
+    6. Patch×patch correlation heatmap grouped by site (4 blocks)
        Expected: uniformly HIGH similarity — cancer histology shared across sites
-    7. Save outputs/
+    7. KDE distribution plot: within-site vs cross-site pairwise similarities
+       Uses ALL tumour patches (subsampled per site for tractability)
+    8. Save outputs/
 
 To run:
     python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py
@@ -35,13 +36,12 @@ import yaml
 from histoRAG.loader import iter_encoder, detect_patch_size
 from histoRAG.labels import tumour_labels_from_geojson
 from histoRAG.correlate import (
-    aggregate_by_patient,
+    select_centroid_patches,
     correlation_matrix,
     compute_umap,
     plot_umap,
     plot_heatmap,
-    tumour_patch_counts,
-    decide_aggregation,
+    plot_similarity_distribution,
 )
 
 
@@ -144,49 +144,80 @@ def run(
         title=f"Tumour Patch Embeddings ({encoder})  —  expected: sites mixed",
     )
 
-    # ----------------------------------- adaptive aggregation + correlation map
-    counts    = tumour_patch_counts(tumour_manifest, tumour_manifest["tumour_label"])
-    threshold = cfg["params"].get("aggregation_threshold", 20)
-    agg_mode  = decide_aggregation(counts, threshold=threshold)
+    # ----------------------- centroid-nearest patch selection (no aggregation) -
+    # For each patient: compute tumour centroid, keep the N closest real patches.
+    # These are actual data points — no mean-pooling, no information blending.
+    n_centroid = int(cfg["params"].get("n_centroid_patches", 35))
+    print(f"[H2 exp02] Selecting {n_centroid} centroid-nearest patches per patient...")
 
-    print(f"[H2 exp02] Building correlation matrix (mode: '{agg_mode}')...")
+    slide_ids  = tumour_manifest["slide_id"].values
+    sites_all  = tumour_manifest["site"].values
+    unique_slides = list(dict.fromkeys(slide_ids))
 
-    if agg_mode == "patient":
-        agg_embeddings, agg_ids = aggregate_by_patient(
-            tumour_manifest, tumour_embeddings, group_col="slide_id", method="mean"
-        )
-        id_to_site           = tumour_manifest.drop_duplicates("slide_id").set_index("slide_id")["site"]
-        heatmap_group_labels = id_to_site.loc[agg_ids].values
-        heatmap_embeddings   = agg_embeddings
-        heatmap_title        = f"Patient Cancer Similarity ({encoder})  —  expected: uniformly high"
-    else:
-        heatmap_embeddings   = tumour_embeddings
-        heatmap_group_labels = tumour_manifest["slide_id"].values
-        heatmap_title        = f"Tumour Patch Similarity ({encoder})  —  expected: uniformly high"
+    selected_emb_parts  = []
+    selected_site_parts = []
 
-    corr = correlation_matrix(heatmap_embeddings)
+    for sid in unique_slides:
+        mask   = slide_ids == sid
+        emb_pt = tumour_embeddings[mask]
+        idx    = select_centroid_patches(emb_pt, n_centroid)
+        selected_emb_parts.append(emb_pt[idx])
+        site_val = sites_all[mask][idx]
+        selected_site_parts.append(site_val)
+
+    selected_emb   = np.concatenate(selected_emb_parts,  axis=0).astype(np.float32)
+    selected_sites = np.concatenate(selected_site_parts, axis=0)
+    n_selected = len(selected_emb)
+    print(f"[H2 exp02] Total selected patches: {n_selected:,} "
+          f"(avg {n_selected/len(unique_slides):.1f}/patient)")
+
+    # ------------------------------------------------- patch×patch correlation -
+    print(f"[H2 exp02] Building {n_selected}×{n_selected} correlation matrix...")
+    corr = correlation_matrix(selected_emb)
+    heatmap_title = (
+        f"Tumour Patch Similarity ({encoder})  —  "
+        f"centroid-nearest {n_centroid} patches/patient"
+    )
     plot_heatmap(
         corr,
-        group_labels=heatmap_group_labels,
+        group_labels=selected_sites,
         out_path=out_dir / "heatmap_tumour_similarity.png",
         title=heatmap_title,
         order_by_group=True,
+        xlabel="Patches (grouped by site)",
+        ylabel="Patches (grouped by site)",
     )
-    np.save(out_dir / "correlation_matrix.npy", corr)
+    np.save(out_dir / "correlation_matrix.npy", corr.astype(np.float16))
+
+    # ------------------------------------------ KDE distribution (all patches) -
+    # Sample n_sample_per_site patches per site from ALL tumour patches (not
+    # just the centroid-selected ones) for an unbiased pairwise similarity plot.
+    kde_sample = int(cfg["params"].get("kde_sample_per_site", 1000))
+    print(f"[H2 exp02] Building similarity distribution (KDE, {kde_sample}/site)...")
+    plot_similarity_distribution(
+        tumour_embeddings,
+        site_labels=tumour_manifest["site"].values,
+        out_path=out_dir / "similarity_distribution.png",
+        title=f"Tumour Patch Similarity Distribution ({encoder})",
+        n_sample_per_site=kde_sample,
+    )
 
     # --------------------------------------------------------------- summary
     summary = {
-        "experiment":                   cfg["experiment"]["name"],
-        "encoder":                      encoder,
-        "patch_size":                   patch_size,
-        "n_patches_total":              total_patches,
-        "n_tumour_patches":             n_tumour_total,
-        "tumour_pct_overall":           round(n_tumour_total / total_patches * 100, 2),
-        "aggregation_mode":             agg_mode,
-        "median_tumour_patches_per_pt": float(counts.median()) if len(counts) > 0 else 0,
+        "experiment":           cfg["experiment"]["name"],
+        "encoder":              encoder,
+        "patch_size":           patch_size,
+        "n_patches_total":      total_patches,
+        "n_tumour_patches":     n_tumour_total,
+        "tumour_pct_overall":   round(n_tumour_total / total_patches * 100, 2),
+        "selection_method":     f"centroid_nearest_{n_centroid}",
+        "n_selected_patches":   n_selected,
+        "n_patients":           len(unique_slides),
+        "kde_sample_per_site":  kde_sample,
         "outputs": [
             "umap_tumour_patches_by_site.png",
             "heatmap_tumour_similarity.png",
+            "similarity_distribution.png",
             "correlation_matrix.npy",
             "summary.json",
         ],

@@ -2,13 +2,15 @@
 Patient correlation analysis utilities for H2 hypotheses.
 
 Provides:
-  - aggregate_by_patient:  mean-pool patch embeddings per patient -> 1 vector/patient
-  - correlation_matrix:    N×N cosine similarity matrix
-  - compute_umap:          2-D UMAP projection
-  - plot_umap:             scatter plot coloured by label
-  - plot_heatmap:          correlation heatmap ordered by group (exposes block-diagonal)
-  - tumour_patch_counts:   count tumour patches per patient
-  - decide_aggregation:    adaptive rule — aggregate or use individual patches
+  - aggregate_by_patient:       mean-pool patch embeddings per patient -> 1 vector/patient
+  - select_centroid_patches:    select N patches closest to patient tumour centroid
+  - correlation_matrix:         N×N cosine similarity matrix
+  - compute_umap:               2-D UMAP projection
+  - plot_umap:                  scatter plot coloured by label
+  - plot_heatmap:               correlation heatmap ordered by group (exposes block-diagonal)
+  - plot_similarity_distribution: within-site vs cross-site KDE plot
+  - tumour_patch_counts:        count tumour patches per patient
+  - decide_aggregation:         adaptive rule — aggregate or use individual patches
 
 All plotting functions save PNG files and print the output path; they do not
 show interactive windows (non-interactive Agg backend).
@@ -22,6 +24,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
+from scipy.stats import gaussian_kde
 from umap import UMAP
 
 
@@ -75,6 +78,27 @@ def aggregate_by_patient(
     agg = agg / norms
 
     return agg, np.array(unique_ids)
+
+
+def select_centroid_patches(embeddings: np.ndarray, n: int) -> np.ndarray:
+    """
+    Select the N patches closest (by L2 distance) to the mean of the embedding cloud.
+
+    The centroid is used only for ranking — it is never stored or returned.
+    If the patient has <= n patches, all indices are returned unchanged.
+
+    Args:
+        embeddings: (M, dim) float32 tumour patches for one patient.
+        n:          number of patches to keep.
+
+    Returns:
+        (min(n, M),) integer indices of the selected patches.
+    """
+    if len(embeddings) <= n:
+        return np.arange(len(embeddings))
+    centroid = embeddings.mean(axis=0)
+    dists = np.linalg.norm(embeddings - centroid, axis=1)
+    return np.argsort(dists)[:n]
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +201,8 @@ def plot_heatmap(
     out_path: str | Path,
     title: str = "Correlation Map",
     order_by_group: bool = True,
+    xlabel: str = "Patients (grouped by site)",
+    ylabel: str = "Patients (grouped by site)",
 ) -> None:
     """
     Plot an N×N cosine similarity heatmap.
@@ -236,13 +262,82 @@ def plot_heatmap(
     ax.set_yticklabels(unique_groups, fontsize=10)
 
     ax.set_title(title, fontsize=12, pad=10)
-    ax.set_xlabel("Patients (grouped by site)", labelpad=8)
-    ax.set_ylabel("Patients (grouped by site)", labelpad=8)
+    ax.set_xlabel(xlabel, labelpad=8)
+    ax.set_ylabel(ylabel, labelpad=8)
 
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"[correlate] Heatmap saved -> {out_path}")
+
+
+def plot_similarity_distribution(
+    embeddings: np.ndarray,
+    site_labels: np.ndarray,
+    out_path: str | Path,
+    title: str = "Tumour Patch Similarity Distribution",
+    n_sample_per_site: int = 1000,
+    random_state: int = 42,
+) -> None:
+    """
+    KDE plot of within-site vs cross-site cosine similarities for tumour patches.
+
+    Subsamples n_sample_per_site patches per site so the full pairwise matrix
+    stays tractable (4 sites × 1000 = 4k patches → 8M pairs).  All tumour
+    patches are eligible for sampling — no centroid selection here.
+
+    Args:
+        embeddings:        (N, dim) float32 — ALL collected tumour patch embeddings.
+        site_labels:       (N,) string array aligned to embeddings, e.g. 'larynx'.
+        out_path:          file path for the saved PNG.
+        title:             plot title.
+        n_sample_per_site: patches to sample per site for pairwise computation.
+        random_state:      RNG seed for reproducibility.
+    """
+    rng = np.random.default_rng(random_state)
+    site_labels = np.asarray(site_labels, dtype=str)
+    unique_sites = np.unique(site_labels)
+
+    sample_idx_parts, sample_site_list = [], []
+    for site in unique_sites:
+        idx = np.where(site_labels == site)[0]
+        if len(idx) > n_sample_per_site:
+            idx = rng.choice(idx, n_sample_per_site, replace=False)
+        sample_idx_parts.append(idx)
+        sample_site_list.extend([site] * len(idx))
+
+    sample_idx   = np.concatenate(sample_idx_parts)
+    sample_emb   = embeddings[sample_idx].astype(np.float32)
+    sample_sites = np.array(sample_site_list, dtype=str)
+
+    sim_mat = (sample_emb @ sample_emb.T).astype(np.float32)
+
+    n = len(sample_emb)
+    rows, cols = np.triu_indices(n, k=1)
+    within_mask = sample_sites[rows] == sample_sites[cols]
+    within_sims = sim_mat[rows[within_mask],  cols[within_mask]]
+    cross_sims  = sim_mat[rows[~within_mask], cols[~within_mask]]
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    for sims, label, color in [
+        (within_sims, f"Within-site  (n={len(within_sims):,} pairs)", "#e53935"),
+        (cross_sims,  f"Cross-site   (n={len(cross_sims):,} pairs)",  "#1e88e5"),
+    ]:
+        kde = gaussian_kde(sims, bw_method=0.08)
+        x = np.linspace(max(0.0, float(sims.min()) - 0.05),
+                        min(1.0, float(sims.max()) + 0.05), 600)
+        ax.plot(x, kde(x), label=label, color=color, linewidth=2)
+        ax.fill_between(x, kde(x), alpha=0.15, color=color)
+
+    ax.set_xlabel("Cosine Similarity", fontsize=11)
+    ax.set_ylabel("Density", fontsize=11)
+    ax.set_title(title, fontsize=12)
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[correlate] Similarity distribution saved -> {out_path}")
 
 
 # ---------------------------------------------------------------------------
