@@ -60,6 +60,8 @@ MVP/runs/
 # Hypothesis experiments outputs — tracked in git (results are versioned)
 !hypotheses/**/outputs/
 !hypotheses/**/outputs/**
+# cache intermediates (re-exclude — large binary arrays, not for version control)
+hypotheses/**/outputs/**/cache_*.npy
 
 # General outputs (root-level only)
 /outputs/

@@ -22,21 +22,14 @@ Two questions answered at patient level using pre-computed frozen embeddings:
 ## Q2 — How similar is cancer tissue across patients regardless of site?
 
 **Method:** Filter to tumour patches only (from `.geojson` annotations) → UMAP on
-individual patches + patient-patient correlation matrix (adaptive aggregation).
+individual patches (no aggregation) + pairwise cosine similarity distribution
+comparing within-site vs cross-site patch pairs.
 
 **Expected UMAP:** Patches from all sites are **mixed** — no site-based separation.
 
-**Expected heatmap:** Uniformly high similarity across all patients — cancer tissue
-shares common histopathological patterns regardless of anatomical site.
-
-### Adaptive aggregation (Q2 correlation matrix)
-
-| Median tumour patches/patient | Method |
-|---|---|
-| ≥ 20 | Mean pool per patient → patient × patient matrix |
-| < 20 | No aggregation → patch × patch matrix, grouped by patient |
-
-See `histoRAG/correlate.py → decide_aggregation`.
+**Expected distribution:** Within-site and cross-site similarity curves heavily
+overlap — cancer tissue shares common histopathological patterns regardless of
+anatomical site.
 
 ---
 
@@ -128,15 +121,12 @@ patches cluster by shared biology rather than anatomical site.
 
 ## Exp02 — Tumour Similarity Results (Q2)
 
-**Dataset:** 708 patients, tumour patches only (streamed per slide, variable rate per slide).
+**Dataset:** 708 patients, tumour patches only (streamed per slide, no aggregation).
 
-| Encoder | Total patches scanned | Tumour patches | Overall tumour % | Aggregation |
-|---|---|---|---|---|
-| CONCH | 8,212,546 | 415,398 | 5.1% | patient (median 310 patches/pt) |
-| UNI | 2,076,207 | 103,812 | 5.0% | patient (median 78 patches/pt) |
-
-Aggregation mode was `patient` for both — median tumour patches per patient well above the
-threshold of 20, so each patient is represented by a mean-pooled tumour embedding.
+| Encoder | Total patches scanned | Tumour patches | Overall tumour % |
+|---|---|---|---|
+| CONCH | 8,212,546 | 415,398 | 5.1% |
+| UNI | 2,076,207 | 103,812 | 5.0% |
 
 ---
 
@@ -157,67 +147,48 @@ More "exploded" structure than CONCH. The central core is densely mixed with all
 overlapping, but many scattered satellite clusters radiate outward, most of them dominated
 by oropharynx (red). This reflects UNI's wider spread in 1024-dim space: typical tumour
 patches converge in the core regardless of site, while atypical or site-specific patches
-form isolated groups at the periphery. UMAP issued a "graph not fully connected" warning,
-which is expected when a high-dimensional space separates some patches too far to bridge
-into one connected neighbourhood structure.
+form isolated groups at the periphery.
 
 ---
 
-### Correlation Heatmap
+### Similarity Distribution (KDE)
+
+6,000 patches sampled per site → ~72M within-site pairs and ~216M cross-site pairs.
 
 | Metric | CONCH | UNI |
 |---|---|---|
-| Within-site mean | 0.717 | 0.499 |
-| Cross-site mean | 0.696 | 0.468 |
-| **Gap (within − cross)** | **0.021** | **0.030** |
+| Within-site mean similarity | 0.535 | 0.296 |
+| Cross-site mean similarity | 0.518 | 0.280 |
+| **Gap (within − cross)** | **+0.017** | **+0.017** |
 
-**Per-site within-similarity (exp02):**
+Both distributions show **heavy overlap** between within-site and cross-site curves —
+the majority of patch pairs share similar cosine similarity regardless of whether the
+two patches come from the same or a different anatomical site. This is the core finding:
+cancer tissue is broadly similar across sites.
 
-| Site | CONCH | UNI |
-|---|---|---|
-| hypopharynx | 0.714 | 0.473 |
-| larynx | 0.725 | 0.499 |
-| oral_cavity | **0.789** | **0.561** |
-| oropharynx | 0.702 | 0.490 |
+The small positive gap (+0.017 for both encoders) means patches from the same site are
+very slightly more similar to each other than to patches from other sites, but this
+difference is small relative to the overall spread of the distribution.
 
-CONCH heatmap remains uniformly red with faint block structure. UNI heatmap shows
-lower absolute similarity (~0.47–0.56 vs CONCH's 0.70–0.79) and slightly more visible
-block boundaries, particularly for oral cavity. The diagonal self-similarity line is
-clearly visible in UNI due to its wider embedding spread.
-
----
-
-### Key Finding — exp01 vs exp02 Gap Shift
-
-| | CONCH exp01 | CONCH exp02 | UNI exp01 | UNI exp02 |
-|---|---|---|---|---|
-| Input | all patches | tumour only | all patches | tumour only |
-| Within-site | 0.835 | 0.717 | 0.663 | 0.499 |
-| Cross-site | 0.819 | 0.696 | 0.621 | 0.468 |
-| **Gap** | **0.016** | **0.021** | **0.043** | **0.030** |
-
-**CONCH gap increases** (0.016 → 0.021) when filtering to tumour patches — tumour
-embeddings still carry site-specific information. Filtering to cancer tissue does not
-reduce site bias in CONCH.
-
-**UNI gap decreases** (0.043 → 0.030) when filtering to tumour patches — tumour
-embeddings become more site-agnostic. UNI encodes tumour biology more independently
-of anatomical location. This is consistent with UNI achieving the best tumour
-discrimination in H1 (F1=0.259).
-
-Oral cavity is the most self-similar site in both encoders across both experiments,
-reflecting its distinct mucosal and salivary gland tissue composition.
+**CONCH** operates at higher absolute similarity (~0.52–0.54) consistent with its
+tighter embedding space seen in exp01. **UNI** operates at lower absolute values
+(~0.28–0.30) due to its wider spread in 1024-dim space, but the gap is identical,
+suggesting both encoders capture the same degree of site-agnostic tumour biology.
 
 ---
 
 ### Conclusion (Q2)
 
-Both encoders show strong tumour patch mixing in UMAP (hypothesis broadly supported),
-but neither achieves fully site-agnostic cancer similarity in the correlation matrix.
-UNI comes closer — its tumour space gap shrinks when filtering to cancer patches, while
-CONCH's site signal actually strengthens. For HistoRAG tumour-specific retrieval, UNI
-is the better choice: it is more likely to surface similar cancer patients regardless
-of anatomical site. CONCH retrieval in tumour space will still favour same-site patients.
+Both encoders strongly support the hypothesis: tumour patches from all four anatomical
+sites (hypopharynx, larynx, oral cavity, oropharynx) are broadly similar in embedding
+space. The UMAP shows sites mixed together with no clean boundaries, and the similarity
+distribution curves for within-site and cross-site pairs nearly completely overlap.
+
+The identical gap (+0.017) across CONCH and UNI suggests a consistent small residual
+site signal — cancer tissue is not completely site-agnostic, but site accounts for only
+a tiny fraction of the total similarity variance. For HistoRAG tumour-specific retrieval,
+both encoders will surface similar cancer patients across sites, making them viable for
+cross-site patient matching.
 
 ---
 
@@ -231,6 +202,10 @@ python hypotheses/H2_patient_correlation/exp01_site_clustering/run.py --encoder 
 python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py
 python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py --encoder uni2h
 
+# Regenerate exp02 plots only (skips the ~20 min embedding scan, uses cached arrays)
+python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py --encoder conch --plots-only
+python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py --encoder uni2h --plots-only
+
 # HPC (both encoders)
 sbatch hypotheses/H2_patient_correlation/run_h2_hpc.sh
 ```
@@ -241,4 +216,4 @@ sbatch hypotheses/H2_patient_correlation/run_h2_hpc.sh
 
 - `histoRAG/loader.py` — `iter_encoder` (streaming), `detect_patch_size`
 - `histoRAG/labels.py` — tumour labels from `.geojson` annotations
-- `histoRAG/correlate.py` — aggregation, UMAP, correlation matrix, heatmap
+- `histoRAG/correlate.py` — UMAP, similarity distribution, interactive 3D UMAP

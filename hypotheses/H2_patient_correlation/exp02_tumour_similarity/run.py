@@ -8,12 +8,7 @@ Pipeline:
        Peak RAM = one slide + accumulated tumour patches across all slides (~5%)
     4. UMAP on a random subsample of tumour patches, coloured by anatomical site
        Expected: all sites are MIXED — cancer looks similar regardless of location
-    5. Centroid-nearest patch selection (no aggregation):
-         For each patient compute tumour centroid, select N closest patches.
-         These are real data points — no mean-pooling.
-    6. Patch×patch correlation heatmap grouped by site (4 blocks)
-       Expected: uniformly HIGH similarity — cancer histology shared across sites
-    7. KDE distribution plot: within-site vs cross-site pairwise similarities
+    5. KDE distribution plot: within-site vs cross-site pairwise similarities
        Uses ALL tumour patches (subsampled per site for tractability)
     8. Save outputs/
 
@@ -36,14 +31,36 @@ import yaml
 from histoRAG.loader import iter_encoder, detect_patch_size
 from histoRAG.labels import tumour_labels_from_geojson
 from histoRAG.correlate import (
-    select_centroid_patches,
-    correlation_matrix,
     compute_umap,
     plot_umap,
     plot_umap_3d,
-    plot_heatmap,
+    plot_umap_3d_interactive,
+    compute_similarity_pairs,
     plot_similarity_distribution,
 )
+
+
+def _plots(out_dir: Path, encoder: str, title_suffix: str) -> None:
+    """Regenerate all plots from cached .npy files. Fast — no embedding scan."""
+    umap_coords_2d = np.load(out_dir / "cache_umap_coords_2d.npy")
+    umap_coords_3d = np.load(out_dir / "cache_umap_coords_3d.npy")
+    umap_sites     = np.load(out_dir / "cache_umap_sites.npy", allow_pickle=True)
+    within_sims    = np.load(out_dir / "cache_within_sims.npy")
+    cross_sims     = np.load(out_dir / "cache_cross_sims.npy")
+
+    plot_umap(umap_coords_2d, labels=umap_sites,
+              out_path=out_dir / "umap_tumour_patches_by_site.png",
+              title=f"Tumour Patch Embeddings ({encoder})  —  expected: sites mixed")
+    plot_umap_3d(umap_coords_3d, labels=umap_sites,
+                 out_path=out_dir / "umap_tumour_patches_by_site_3d.png",
+                 title=f"Tumour Patch Embeddings 3D ({encoder})  —  expected: sites mixed")
+    plot_umap_3d_interactive(umap_coords_3d, labels=umap_sites,
+                             out_path=out_dir / "umap_tumour_patches_by_site_3d.html",
+                             title=f"Tumour Patch Embeddings 3D ({encoder})  —  expected: sites mixed")
+    plot_similarity_distribution(within_sims, cross_sims,
+                                 out_path=out_dir / "similarity_distribution.png",
+                                 title=f"Tumour Patch Similarity Distribution ({encoder})")
+    print(f"[H2 exp02] Plots regenerated from cache -> {out_dir}")
 
 
 def run(
@@ -51,6 +68,7 @@ def run(
     encoder_override: str | None = None,
     embeddings_root_override: str | None = None,
     geojson_dir_override: str | None = None,
+    plots_only: bool = False,
 ) -> None:
     # ------------------------------------------------------------------ setup
     config_path = Path(config_path)
@@ -62,6 +80,20 @@ def run(
     embeddings_root = embeddings_root_override or cfg["inputs"]["embeddings_root"]
     out_dir         = Path(cfg["outputs"]["dir"]) / encoder
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    # --plots-only: skip heavy computation, regenerate from cached arrays
+    if plots_only:
+        missing = [f for f in [
+            "cache_umap_coords_2d.npy", "cache_umap_coords_3d.npy",
+            "cache_umap_sites.npy", "cache_within_sims.npy", "cache_cross_sims.npy",
+        ] if not (out_dir / f).exists()]
+        if missing:
+            raise FileNotFoundError(
+                f"Cache files missing in {out_dir}: {missing}\n"
+                "Run without --plots-only first to build the cache."
+            )
+        _plots(out_dir, encoder, title_suffix="")
+        return
 
     if not geojson_dir.exists():
         raise FileNotFoundError(
@@ -75,17 +107,15 @@ def run(
           f"{' (from config)' if patch_size_cfg else ' (auto-detected)'}")
 
     # ----------------------- stream slides, collect only tumour patches ------
-    # For each slide: load embeddings, derive tumour labels, keep tumour rows only.
-    # Non-tumour patches (~95% on average, varies per slide) are discarded immediately.
-    print(f"[H2 exp02] Streaming slides and collecting tumour patches...")
+    print("[H2 exp02] Streaming slides and collecting tumour patches...")
 
     tumour_emb_parts      = []
     tumour_manifest_parts = []
     total_patches         = 0
 
     for emb, slide_df in iter_encoder(encoder, embeddings_root):
-        slide_id     = slide_df["slide_id"].iloc[0]
-        n_slide      = len(emb)
+        slide_id      = slide_df["slide_id"].iloc[0]
+        n_slide       = len(emb)
         total_patches += n_slide
 
         tumour_lbl = tumour_labels_from_geojson(slide_df, geojson_dir, patch_size=patch_size)
@@ -111,13 +141,17 @@ def run(
     tumour_manifest   = pd.concat(tumour_manifest_parts, ignore_index=True)
     n_tumour_total    = len(tumour_manifest)
 
+    # L2-normalize so cosine similarity = dot product (CONCH is pre-normalized,
+    # UNI h5 files store raw un-normalized vectors)
+    norms = np.linalg.norm(tumour_embeddings, axis=1, keepdims=True)
+    norms = np.where(norms == 0, 1.0, norms)
+    tumour_embeddings = tumour_embeddings / norms
+
     print(f"\n[H2 exp02] Total patches scanned : {total_patches:,}")
     print(f"[H2 exp02] Tumour patches collected: {n_tumour_total:,} "
           f"({n_tumour_total/total_patches*100:.1f}% overall)")
 
     # ----------------------------------------------------------------- UMAP
-    # UMAP on individual tumour patches coloured by site.
-    # Expected: all sites MIXED — cancer patches similar regardless of location.
     umap_params  = cfg["params"].get("umap", {})
     umap_max_pts = int(umap_params.get("max_points", 50_000))
 
@@ -139,98 +173,44 @@ def run(
 
     print("[H2 exp02] Computing 2D UMAP on tumour patches...")
     umap_coords_2d = compute_umap(umap_emb, n_components=2, **umap_kwargs)
-    plot_umap(
-        umap_coords_2d,
-        labels=umap_sites,
-        out_path=out_dir / "umap_tumour_patches_by_site.png",
-        title=f"Tumour Patch Embeddings ({encoder})  —  expected: sites mixed",
-    )
 
     print("[H2 exp02] Computing 3D UMAP on tumour patches...")
     umap_coords_3d = compute_umap(umap_emb, n_components=3, **umap_kwargs)
-    plot_umap_3d(
-        umap_coords_3d,
-        labels=umap_sites,
-        out_path=out_dir / "umap_tumour_patches_by_site_3d.png",
-        title=f"Tumour Patch Embeddings 3D ({encoder})  —  expected: sites mixed",
-    )
 
-    # ----------------------- centroid-nearest patch selection (no aggregation) -
-    # For each patient: compute tumour centroid, keep the N closest real patches.
-    # These are actual data points — no mean-pooling, no information blending.
-    n_centroid = int(cfg["params"].get("n_centroid_patches", 35))
-    print(f"[H2 exp02] Selecting {n_centroid} centroid-nearest patches per patient...")
-
-    slide_ids  = tumour_manifest["slide_id"].values
-    sites_all  = tumour_manifest["site"].values
-    unique_slides = list(dict.fromkeys(slide_ids))
-
-    selected_emb_parts  = []
-    selected_site_parts = []
-
-    for sid in unique_slides:
-        mask   = slide_ids == sid
-        emb_pt = tumour_embeddings[mask]
-        idx    = select_centroid_patches(emb_pt, n_centroid)
-        selected_emb_parts.append(emb_pt[idx])
-        site_val = sites_all[mask][idx]
-        selected_site_parts.append(site_val)
-
-    selected_emb   = np.concatenate(selected_emb_parts,  axis=0).astype(np.float32)
-    selected_sites = np.concatenate(selected_site_parts, axis=0)
-    n_selected = len(selected_emb)
-    print(f"[H2 exp02] Total selected patches: {n_selected:,} "
-          f"(avg {n_selected/len(unique_slides):.1f}/patient)")
-
-    # ------------------------------------------------- patch×patch correlation -
-    print(f"[H2 exp02] Building {n_selected}×{n_selected} correlation matrix...")
-    corr = correlation_matrix(selected_emb)
-    heatmap_title = (
-        f"Tumour Patch Similarity ({encoder})  —  "
-        f"centroid-nearest {n_centroid} patches/patient"
-    )
-    plot_heatmap(
-        corr,
-        group_labels=selected_sites,
-        out_path=out_dir / "heatmap_tumour_similarity.png",
-        title=heatmap_title,
-        order_by_group=True,
-        xlabel="Patches (grouped by site)",
-        ylabel="Patches (grouped by site)",
-    )
-    np.save(out_dir / "correlation_matrix.npy", corr.astype(np.float16))
-
-    # ------------------------------------------ KDE distribution (all patches) -
-    # Sample n_sample_per_site patches per site from ALL tumour patches (not
-    # just the centroid-selected ones) for an unbiased pairwise similarity plot.
+    # ----------------------------------------- similarity pairs (for KDE plot)
     kde_sample = int(cfg["params"].get("kde_sample_per_site", 1000))
-    print(f"[H2 exp02] Building similarity distribution (KDE, {kde_sample}/site)...")
-    plot_similarity_distribution(
+    print(f"[H2 exp02] Computing similarity pairs ({kde_sample}/site)...")
+    within_sims, cross_sims = compute_similarity_pairs(
         tumour_embeddings,
         site_labels=tumour_manifest["site"].values,
-        out_path=out_dir / "similarity_distribution.png",
-        title=f"Tumour Patch Similarity Distribution ({encoder})",
         n_sample_per_site=kde_sample,
     )
 
+    # ----------------------------------------------------------- save cache ---
+    np.save(out_dir / "cache_umap_coords_2d.npy", umap_coords_2d)
+    np.save(out_dir / "cache_umap_coords_3d.npy", umap_coords_3d)
+    np.save(out_dir / "cache_umap_sites.npy",     umap_sites)
+    np.save(out_dir / "cache_within_sims.npy",    within_sims)
+    np.save(out_dir / "cache_cross_sims.npy",     cross_sims)
+    print("[H2 exp02] Intermediate arrays cached.")
+
+    # -------------------------------------------------------- generate plots --
+    _plots(out_dir, encoder, title_suffix="")
+
     # --------------------------------------------------------------- summary
     summary = {
-        "experiment":           cfg["experiment"]["name"],
-        "encoder":              encoder,
-        "patch_size":           patch_size,
-        "n_patches_total":      total_patches,
-        "n_tumour_patches":     n_tumour_total,
-        "tumour_pct_overall":   round(n_tumour_total / total_patches * 100, 2),
-        "selection_method":     f"centroid_nearest_{n_centroid}",
-        "n_selected_patches":   n_selected,
-        "n_patients":           len(unique_slides),
-        "kde_sample_per_site":  kde_sample,
+        "experiment":          cfg["experiment"]["name"],
+        "encoder":             encoder,
+        "patch_size":          patch_size,
+        "n_patches_total":     total_patches,
+        "n_tumour_patches":    n_tumour_total,
+        "tumour_pct_overall":  round(n_tumour_total / total_patches * 100, 2),
+        "kde_sample_per_site": kde_sample,
         "outputs": [
             "umap_tumour_patches_by_site.png",
             "umap_tumour_patches_by_site_3d.png",
-            "heatmap_tumour_similarity.png",
+            "umap_tumour_patches_by_site_3d.html",
             "similarity_distribution.png",
-            "correlation_matrix.npy",
             "summary.json",
         ],
     }
@@ -249,7 +229,10 @@ if __name__ == "__main__":
                         help="Override embeddings_root from config (useful on HPC).")
     parser.add_argument("--geojson-dir", default=None,
                         help="Override geojson_dir from config (useful on HPC).")
+    parser.add_argument("--plots-only", action="store_true",
+                        help="Skip embedding scan; regenerate plots from cached .npy files.")
     args = parser.parse_args()
     run(args.config, encoder_override=args.encoder,
         embeddings_root_override=args.embeddings_root,
-        geojson_dir_override=args.geojson_dir)
+        geojson_dir_override=args.geojson_dir,
+        plots_only=args.plots_only)

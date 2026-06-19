@@ -293,7 +293,7 @@ def plot_heatmap(
         step = n_full // max_display
         display_matrix = matrix[::step, ::step]
         scale = 1.0 / step
-        print(f"[correlate] Heatmap downsampled {n_full}→{len(display_matrix)} for rendering (step={step})")
+        print(f"[correlate] Heatmap downsampled {n_full}->{len(display_matrix)} for rendering (step={step})")
     else:
         display_matrix = matrix
         scale = 1.0
@@ -330,28 +330,71 @@ def plot_heatmap(
     print(f"[correlate] Heatmap saved -> {out_path}")
 
 
-def plot_similarity_distribution(
-    embeddings: np.ndarray,
-    site_labels: np.ndarray,
+def plot_umap_3d_interactive(
+    coords: np.ndarray,
+    labels: list | np.ndarray | pd.Series,
     out_path: str | Path,
-    title: str = "Tumour Patch Similarity Distribution",
-    n_sample_per_site: int = 1000,
-    random_state: int = 42,
+    title: str = "UMAP (3D interactive)",
 ) -> None:
     """
-    KDE plot of within-site vs cross-site cosine similarities for tumour patches.
+    Interactive 3-D UMAP scatter saved as a self-contained HTML file.
 
-    Subsamples n_sample_per_site patches per site so the full pairwise matrix
-    stays tractable (4 sites × 1000 = 4k patches → 8M pairs).  All tumour
-    patches are eligible for sampling — no centroid selection here.
+    Open the HTML in any browser — you can rotate, zoom, and hover over
+    points to see their site label.
 
     Args:
-        embeddings:        (N, dim) float32 — ALL collected tumour patch embeddings.
-        site_labels:       (N,) string array aligned to embeddings, e.g. 'larynx'.
-        out_path:          file path for the saved PNG.
-        title:             plot title.
-        n_sample_per_site: patches to sample per site for pairwise computation.
-        random_state:      RNG seed for reproducibility.
+        coords:   (N, 3) coordinates from compute_umap(n_components=3).
+        labels:   length-N sequence of string group labels.
+        out_path: file path for the saved HTML (e.g. 'umap_3d.html').
+        title:    plot title shown inside the interactive figure.
+    """
+    import plotly.graph_objects as go
+
+    labels = np.asarray(labels, dtype=str)
+    unique_labels = list(dict.fromkeys(labels))
+    palette = _label_palette(unique_labels)
+
+    traces = []
+    for lbl in unique_labels:
+        mask = labels == lbl
+        traces.append(go.Scatter3d(
+            x=coords[mask, 0],
+            y=coords[mask, 1],
+            z=coords[mask, 2],
+            mode="markers",
+            name=lbl,
+            marker=dict(size=3, color=palette[lbl], opacity=0.7),
+            hovertemplate=f"<b>{lbl}</b><extra></extra>",
+        ))
+
+    fig = go.Figure(data=traces)
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=14)),
+        scene=dict(
+            xaxis_title="UMAP-1",
+            yaxis_title="UMAP-2",
+            zaxis_title="UMAP-3",
+        ),
+        legend=dict(title="Site", itemsizing="constant"),
+        margin=dict(l=0, r=0, t=40, b=0),
+    )
+
+    out_path = Path(out_path)
+    fig.write_html(str(out_path), include_plotlyjs="cdn")
+    print(f"[correlate] Interactive 3D UMAP saved -> {out_path}")
+
+
+def compute_similarity_pairs(
+    embeddings: np.ndarray,
+    site_labels: np.ndarray,
+    n_sample_per_site: int = 1000,
+    random_state: int = 42,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Sample patches per site and return (within_sims, cross_sims) arrays.
+
+    Returned arrays can be cached and passed directly to plot_similarity_distribution
+    to regenerate the plot without re-running the heavy embedding scan.
     """
     rng = np.random.default_rng(random_state)
     site_labels = np.asarray(site_labels, dtype=str)
@@ -370,40 +413,50 @@ def plot_similarity_distribution(
     sample_sites = np.array(sample_site_list, dtype=str)
 
     sim_mat = (sample_emb @ sample_emb.T).astype(np.float32)
-
     n = len(sample_emb)
     rows, cols = np.triu_indices(n, k=1)
     within_mask = sample_sites[rows] == sample_sites[cols]
     within_sims = sim_mat[rows[within_mask],  cols[within_mask]]
     cross_sims  = sim_mat[rows[~within_mask], cols[~within_mask]]
+    return within_sims, cross_sims
 
+
+def plot_similarity_distribution(
+    within_sims: np.ndarray,
+    cross_sims: np.ndarray,
+    out_path: str | Path,
+    title: str = "Tumour Patch Similarity Distribution",
+) -> None:
+    """
+    Histogram of within-site vs cross-site cosine similarities.
+
+    Takes pre-computed similarity arrays from compute_similarity_pairs so the
+    plot can be regenerated without re-running the expensive embedding scan.
+    """
     within_mean = float(within_sims.mean())
     cross_mean  = float(cross_sims.mean())
     gap = within_mean - cross_mean
 
-    # shared x range covering both distributions
+    # shared bin edges covering both distributions
     all_sims = np.concatenate([within_sims, cross_sims])
-    x_lo = max(0.0, float(all_sims.min()) - 0.05)
-    x_hi = min(1.0, float(all_sims.max()) + 0.05)
-    x = np.linspace(x_lo, x_hi, 600)
+    x_lo = max(0.0, float(all_sims.min()) - 0.02)
+    x_hi = min(1.0, float(all_sims.max()) + 0.02)
+    bins = np.linspace(x_lo, x_hi, 60)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
 
     fig, ax = plt.subplots(figsize=(9, 5))
 
     colors = {"within": "#e53935", "cross": "#1e88e5"}
     for sims, key, label in [
-        (within_sims, "within", f"Within-site  (mean={within_mean:.3f}, n={len(within_sims):,} pairs)"),
-        (cross_sims,  "cross",  f"Cross-site   (mean={cross_mean:.3f},  n={len(cross_sims):,} pairs)"),
+        (within_sims, "within", f"Within-site  (mean={within_mean:.3f})"),
+        (cross_sims,  "cross",  f"Cross-site   (mean={cross_mean:.3f})"),
     ]:
         color = colors[key]
-        kde = gaussian_kde(sims, bw_method=0.08)
-        y = kde(x)
-        ax.plot(x, y, label=label, color=color, linewidth=2)
-        ax.fill_between(x, y, alpha=0.15, color=color)
-        # vertical mean line
+        counts, _ = np.histogram(sims, bins=bins)
+        ax.plot(bin_centers, counts, label=label, color=color, linewidth=2)
+        ax.fill_between(bin_centers, counts, alpha=0.15, color=color)
         ax.axvline(sims.mean(), color=color, linestyle="--", linewidth=1.2, alpha=0.8)
 
-    # annotate the gap
-    y_top = ax.get_ylim()[1]
     ax.annotate(
         f"gap = {gap:+.4f}\n({'within > cross' if gap > 0 else 'cross > within'})",
         xy=(0.97, 0.95), xycoords="axes fraction",
@@ -416,7 +469,7 @@ def plot_similarity_distribution(
         "(0 = completely different directions,  1 = identical)",
         fontsize=10,
     )
-    ax.set_ylabel("Proportion of patch pairs at this similarity", fontsize=10)
+    ax.set_ylabel("Number of patch pairs", fontsize=10)
     ax.set_title(title, fontsize=12)
     ax.legend(fontsize=9)
     ax.grid(True, alpha=0.3)

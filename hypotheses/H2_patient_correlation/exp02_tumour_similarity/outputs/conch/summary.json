@@ -5,12 +5,12 @@
   "n_patches_total": 8212546,
   "n_tumour_patches": 415398,
   "tumour_pct_overall": 5.06,
-  "aggregation_mode": "patient",
-  "median_tumour_patches_per_pt": 310.5,
+  "kde_sample_per_site": 6000,
   "outputs": [
     "umap_tumour_patches_by_site.png",
-    "heatmap_tumour_similarity.png",
-    "correlation_matrix.npy",
+    "umap_tumour_patches_by_site_3d.png",
+    "umap_tumour_patches_by_site_3d.html",
+    "similarity_distribution.png",
     "summary.json"
   ]
 }

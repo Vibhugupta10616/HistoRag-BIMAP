@@ -37,8 +37,8 @@ python MVP/pipeline.py --config MVP/configs/phase0_mvp.yaml --seed 42
 | Phase | Goal | Status |
 |---|---|---|
 | **0 — MVP** | End-to-end patch retrieval pipeline (CLIP + FAISS) | **Complete** |
-| **1 — H1** | Tumour vs Other classification on patch embeddings + XAI | In progress |
-| **1 — H2** | Patient correlation maps: site clustering + cancer similarity | In progress |
+| **1 — H1** | Tumour vs Other classification on patch embeddings + XAI | **Complete** |
+| **1 — H2** | Patient correlation maps: site clustering + cancer similarity | **Complete** |
 | 2 — Extensions | Spatial arrangement (ABMIL/graph), index ablations | Planned |
 | 3 — Consolidation | Reproducibility, figures, report | Planned |
 
@@ -82,7 +82,7 @@ HistoRag-BIMAP/
 │   ├── retrieve.py              # retrieval splits + top-k accuracy + mAP
 │   ├── log.py                   # config loading, seeding, experiment CSV logging
 │   ├── labels.py                # tumour labels (geojson) + site labels (clinical CSV)
-│   ├── correlate.py             # patient aggregation, UMAP, correlation matrix, heatmap
+│   ├── correlate.py             # UMAP, similarity distribution, interactive 3D UMAP
 │   ├── classify.py              # H1 classifier stub + real classification metrics
 │   └── viz/                     # Streamlit retrieval demo
 ├── hypotheses/
@@ -98,9 +98,7 @@ HistoRag-BIMAP/
 │   └── runs/                    # auto-generated immutable per-run config snapshots
 ├── experiments/
 │   └── experiments.csv          # all retrieval pipeline runs
-├── data/                        # gitignored — WSIs, patches, indexes, embeddings
-└── docs/
-    └── PLAN.md                  # authoritative project plan + hypothesis definitions
+└── data/                        # gitignored — WSIs, patches, indexes, embeddings
 ```
 
 ---
