@@ -182,10 +182,12 @@ def plot_heatmap(
     Plot an N×N cosine similarity heatmap.
 
     When order_by_group=True, rows and columns are sorted by group label so
-    that members of the same group are adjacent.  This makes any block-diagonal
-    structure (strong within-group similarity) immediately visible.
+    that members of the same group are adjacent.  Group names are shown at
+    block midpoints on both axes.
 
-    Red = high similarity (+1), Blue = low similarity (-1).
+    Colormap is data-driven (YlOrRd): light yellow = low similarity within
+    the observed range, dark red = high similarity.  vmin is set just below
+    the off-diagonal minimum so the full colour range is used.
 
     Args:
         matrix:         (N, N) cosine similarity matrix from correlation_matrix().
@@ -201,31 +203,41 @@ def plot_heatmap(
         matrix = matrix[np.ix_(sort_idx, sort_idx)]
         group_labels = group_labels[sort_idx]
 
-    fig, ax = plt.subplots(figsize=(10, 8))
-    im = ax.imshow(matrix, cmap="RdBu_r", vmin=-1, vmax=1, aspect="auto", interpolation="nearest")
-    plt.colorbar(im, ax=ax, label="Correlation (Similarity)", shrink=0.8)
+    # data-driven colour range — exclude self-similarity diagonal (always 1.0)
+    off_diag = matrix[~np.eye(len(matrix), dtype=bool)]
+    vmin = max(0.0, float(off_diag.min()) - 0.02)
+    vmax = 1.0
 
-    # draw white lines at group boundaries so blocks are easy to see
-    if order_by_group:
-        for i in range(1, len(group_labels)):
-            if group_labels[i] != group_labels[i - 1]:
-                ax.axhline(y=i - 0.5, color="white", linewidth=1.5)
-                ax.axvline(x=i - 0.5, color="white", linewidth=1.5)
+    fig, ax = plt.subplots(figsize=(10, 9))
+    im = ax.imshow(matrix, cmap="YlOrRd", vmin=vmin, vmax=vmax,
+                   aspect="auto", interpolation="nearest")
+    plt.colorbar(im, ax=ax, label="Cosine Similarity", shrink=0.8)
 
-    ax.set_title(title, fontsize=12)
-    ax.set_xlabel("Patients")
-    ax.set_ylabel("Patients")
+    # white boundary lines between groups
+    block_starts, block_ends, unique_groups = [], [], []
+    start = 0
+    for i in range(1, len(group_labels)):
+        if group_labels[i] != group_labels[i - 1]:
+            block_starts.append(start)
+            block_ends.append(i - 1)
+            unique_groups.append(group_labels[i - 1])
+            ax.axhline(y=i - 0.5, color="white", linewidth=1.5)
+            ax.axvline(x=i - 0.5, color="white", linewidth=1.5)
+            start = i
+    block_starts.append(start)
+    block_ends.append(len(group_labels) - 1)
+    unique_groups.append(group_labels[-1])
 
-    # suppress individual tick labels when N is too large to read
-    n = matrix.shape[0]
-    if n > 40:
-        ax.set_xticks([])
-        ax.set_yticks([])
-    else:
-        ax.set_xticks(range(n))
-        ax.set_xticklabels(group_labels, rotation=90, fontsize=6)
-        ax.set_yticks(range(n))
-        ax.set_yticklabels(group_labels, fontsize=6)
+    # group name ticks at block midpoints on both axes
+    midpoints = [(s + e) / 2 for s, e in zip(block_starts, block_ends)]
+    ax.set_xticks(midpoints)
+    ax.set_xticklabels(unique_groups, rotation=30, ha="right", fontsize=10)
+    ax.set_yticks(midpoints)
+    ax.set_yticklabels(unique_groups, fontsize=10)
+
+    ax.set_title(title, fontsize=12, pad=10)
+    ax.set_xlabel("Patients (grouped by site)", labelpad=8)
+    ax.set_ylabel("Patients (grouped by site)", labelpad=8)
 
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
