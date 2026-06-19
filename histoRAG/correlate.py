@@ -205,9 +205,10 @@ def plot_heatmap(
         matrix = matrix[np.ix_(sort_idx, sort_idx)]
         group_labels = group_labels[sort_idx]
 
-    # discrete 5-bin colormap — each bin is a distinct shade
+    # discrete 5-bin colormap — each bin is a visually distinct hue
     _bounds = [0.00, 0.50, 0.70, 0.85, 0.95, 1.01]  # 1.01 captures exact 1.0
-    _colors = ["#ffffcc", "#fd8d3c", "#f03b20", "#bd0026", "#800026"]
+    _colors = ["#fff176", "#64b5f6", "#43a047", "#ef6c00", "#b71c1c"]
+    #           light yellow  light blue   green      deep orange   dark red
     _labels = ["0.00 – 0.50", "0.51 – 0.70", "0.70 – 0.85", "0.85 – 0.95", "0.95+"]
     _cmap = ListedColormap(_colors)
     _norm = BoundaryNorm(_bounds, ncolors=len(_colors))
