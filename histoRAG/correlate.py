@@ -20,6 +20,8 @@ import matplotlib
 matplotlib.use("Agg")  # non-interactive; works without a display / on servers
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from matplotlib.colors import BoundaryNorm, ListedColormap
+from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
 from umap import UMAP
@@ -203,15 +205,30 @@ def plot_heatmap(
         matrix = matrix[np.ix_(sort_idx, sort_idx)]
         group_labels = group_labels[sort_idx]
 
-    # data-driven colour range — exclude self-similarity diagonal (always 1.0)
-    off_diag = matrix[~np.eye(len(matrix), dtype=bool)]
-    vmin = max(0.0, float(off_diag.min()) - 0.02)
-    vmax = 1.0
+    # discrete 5-bin colormap — each bin is a distinct shade
+    _bounds = [0.00, 0.50, 0.70, 0.85, 0.95, 1.01]  # 1.01 captures exact 1.0
+    _colors = ["#ffffcc", "#fd8d3c", "#f03b20", "#bd0026", "#800026"]
+    _labels = ["0.00 – 0.50", "0.51 – 0.70", "0.70 – 0.85", "0.85 – 0.95", "0.95+"]
+    _cmap = ListedColormap(_colors)
+    _norm = BoundaryNorm(_bounds, ncolors=len(_colors))
 
     fig, ax = plt.subplots(figsize=(10, 9))
-    im = ax.imshow(matrix, cmap="YlOrRd", vmin=vmin, vmax=vmax,
-                   aspect="auto", interpolation="nearest")
-    plt.colorbar(im, ax=ax, label="Cosine Similarity", shrink=0.8)
+    ax.imshow(matrix, cmap=_cmap, norm=_norm, aspect="auto", interpolation="nearest")
+
+    legend_handles = [
+        Patch(facecolor=c, edgecolor="#888888", linewidth=0.6, label=l)
+        for c, l in zip(_colors, _labels)
+    ]
+    ax.legend(
+        handles=legend_handles,
+        title="Cosine Similarity",
+        title_fontsize=9,
+        fontsize=8,
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1.0),
+        borderaxespad=0,
+        framealpha=0.9,
+    )
 
     # white boundary lines between groups
     block_starts, block_ends, unique_groups = [], [], []
