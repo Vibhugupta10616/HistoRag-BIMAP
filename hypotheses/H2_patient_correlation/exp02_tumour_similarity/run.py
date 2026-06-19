@@ -40,6 +40,7 @@ from histoRAG.correlate import (
     correlation_matrix,
     compute_umap,
     plot_umap,
+    plot_umap_3d,
     plot_heatmap,
     plot_similarity_distribution,
 )
@@ -130,18 +131,28 @@ def run(
         umap_emb   = tumour_embeddings
         umap_sites = tumour_manifest["site"].values
 
-    print("[H2 exp02] Computing UMAP on tumour patches...")
-    umap_coords = compute_umap(
-        umap_emb,
+    umap_kwargs = dict(
         n_neighbors=umap_params.get("n_neighbors", 15),
         min_dist=umap_params.get("min_dist", 0.1),
         random_state=umap_params.get("random_state", 42),
     )
+
+    print("[H2 exp02] Computing 2D UMAP on tumour patches...")
+    umap_coords_2d = compute_umap(umap_emb, n_components=2, **umap_kwargs)
     plot_umap(
-        umap_coords,
+        umap_coords_2d,
         labels=umap_sites,
         out_path=out_dir / "umap_tumour_patches_by_site.png",
         title=f"Tumour Patch Embeddings ({encoder})  —  expected: sites mixed",
+    )
+
+    print("[H2 exp02] Computing 3D UMAP on tumour patches...")
+    umap_coords_3d = compute_umap(umap_emb, n_components=3, **umap_kwargs)
+    plot_umap_3d(
+        umap_coords_3d,
+        labels=umap_sites,
+        out_path=out_dir / "umap_tumour_patches_by_site_3d.png",
+        title=f"Tumour Patch Embeddings 3D ({encoder})  —  expected: sites mixed",
     )
 
     # ----------------------- centroid-nearest patch selection (no aggregation) -
@@ -216,6 +227,7 @@ def run(
         "kde_sample_per_site":  kde_sample,
         "outputs": [
             "umap_tumour_patches_by_site.png",
+            "umap_tumour_patches_by_site_3d.png",
             "heatmap_tumour_similarity.png",
             "similarity_distribution.png",
             "correlation_matrix.npy",

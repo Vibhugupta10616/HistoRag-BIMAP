@@ -130,25 +130,26 @@ def compute_umap(
     n_neighbors: int = 15,
     min_dist: float = 0.1,
     random_state: int = 42,
+    n_components: int = 2,
 ) -> np.ndarray:
     """
-    Reduce high-dimensional embeddings to 2-D using UMAP.
+    Reduce high-dimensional embeddings to n_components-D using UMAP.
 
     Args:
         embeddings:   (N, dim) float32 embeddings to project.
         n_neighbors:  size of the local neighbourhood used by UMAP.
-                      Smaller = more local structure; larger = more global.
-        min_dist:     minimum distance between points in 2-D.
-                      Smaller = tighter clusters; larger = more spread.
+        min_dist:     minimum distance between points in reduced space.
         random_state: seed for reproducibility.
+        n_components: output dimensionality (2 or 3).
 
     Returns:
-        (N, 2) float32 2-D coordinates
+        (N, n_components) float32 coordinates
     """
     reducer = UMAP(
         n_neighbors=n_neighbors,
         min_dist=min_dist,
         random_state=random_state,
+        n_components=n_components,
         verbose=False,
     )
     return reducer.fit_transform(embeddings).astype(np.float32)
@@ -193,6 +194,48 @@ def plot_umap(
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"[correlate] UMAP saved -> {out_path}")
+
+
+def plot_umap_3d(
+    coords: np.ndarray,
+    labels: list | np.ndarray | pd.Series,
+    out_path: str | Path,
+    title: str = "UMAP (3D)",
+) -> None:
+    """
+    3-D scatter plot of UMAP coordinates coloured by label.
+
+    Args:
+        coords:   (N, 3) coordinates from compute_umap(n_components=3).
+        labels:   length-N sequence of string group labels.
+        out_path: file path for the saved PNG.
+        title:    plot title.
+    """
+    from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 — registers 3D projection
+
+    labels = np.asarray(labels, dtype=str)
+    unique_labels = list(dict.fromkeys(labels))
+    palette = _label_palette(unique_labels)
+
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection="3d")
+
+    for lbl in unique_labels:
+        mask = labels == lbl
+        ax.scatter(
+            coords[mask, 0], coords[mask, 1], coords[mask, 2],
+            c=palette[lbl], label=lbl, s=12, alpha=0.7, linewidths=0,
+        )
+
+    ax.set_title(title, fontsize=12)
+    ax.set_xlabel("UMAP-1", fontsize=9)
+    ax.set_ylabel("UMAP-2", fontsize=9)
+    ax.set_zlabel("UMAP-3", fontsize=9)
+    ax.legend(markerscale=2, fontsize=9, loc="upper left", framealpha=0.7)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[correlate] UMAP 3D saved -> {out_path}")
 
 
 def plot_heatmap(
@@ -318,21 +361,48 @@ def plot_similarity_distribution(
     within_sims = sim_mat[rows[within_mask],  cols[within_mask]]
     cross_sims  = sim_mat[rows[~within_mask], cols[~within_mask]]
 
-    fig, ax = plt.subplots(figsize=(9, 5))
-    for sims, label, color in [
-        (within_sims, f"Within-site  (n={len(within_sims):,} pairs)", "#e53935"),
-        (cross_sims,  f"Cross-site   (n={len(cross_sims):,} pairs)",  "#1e88e5"),
-    ]:
-        kde = gaussian_kde(sims, bw_method=0.08)
-        x = np.linspace(max(0.0, float(sims.min()) - 0.05),
-                        min(1.0, float(sims.max()) + 0.05), 600)
-        ax.plot(x, kde(x), label=label, color=color, linewidth=2)
-        ax.fill_between(x, kde(x), alpha=0.15, color=color)
+    within_mean = float(within_sims.mean())
+    cross_mean  = float(cross_sims.mean())
+    gap = within_mean - cross_mean
 
-    ax.set_xlabel("Cosine Similarity", fontsize=11)
-    ax.set_ylabel("Density", fontsize=11)
+    # shared x range covering both distributions
+    all_sims = np.concatenate([within_sims, cross_sims])
+    x_lo = max(0.0, float(all_sims.min()) - 0.05)
+    x_hi = min(1.0, float(all_sims.max()) + 0.05)
+    x = np.linspace(x_lo, x_hi, 600)
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+
+    colors = {"within": "#e53935", "cross": "#1e88e5"}
+    for sims, key, label in [
+        (within_sims, "within", f"Within-site  (mean={within_mean:.3f}, n={len(within_sims):,} pairs)"),
+        (cross_sims,  "cross",  f"Cross-site   (mean={cross_mean:.3f},  n={len(cross_sims):,} pairs)"),
+    ]:
+        color = colors[key]
+        kde = gaussian_kde(sims, bw_method=0.08)
+        y = kde(x)
+        ax.plot(x, y, label=label, color=color, linewidth=2)
+        ax.fill_between(x, y, alpha=0.15, color=color)
+        # vertical mean line
+        ax.axvline(sims.mean(), color=color, linestyle="--", linewidth=1.2, alpha=0.8)
+
+    # annotate the gap
+    y_top = ax.get_ylim()[1]
+    ax.annotate(
+        f"gap = {gap:+.4f}\n({'within > cross' if gap > 0 else 'cross > within'})",
+        xy=(0.97, 0.95), xycoords="axes fraction",
+        ha="right", va="top", fontsize=9,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="#888", alpha=0.8),
+    )
+
+    ax.set_xlabel(
+        "Cosine similarity between two tumour patches\n"
+        "(0 = completely different directions,  1 = identical)",
+        fontsize=10,
+    )
+    ax.set_ylabel("Proportion of patch pairs at this similarity", fontsize=10)
     ax.set_title(title, fontsize=12)
-    ax.legend(fontsize=10)
+    ax.legend(fontsize=9)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
