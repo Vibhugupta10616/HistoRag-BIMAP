@@ -72,8 +72,10 @@ def run(encoder: str) -> None:
     str_k2 = np.array([f"cluster_{i}" for i in labels_k2])
     str_k8 = np.array([f"cluster_{i}" for i in labels_k8])
 
-    out_k2 = _OUT_EXP01 / encoder / "umap_kmeans_k2.png"
-    out_k8 = _OUT_EXP02 / encoder / "umap_kmeans_k8.png"
+    vis_dir = _OUT_EXP01 / "vis"
+    vis_dir.mkdir(parents=True, exist_ok=True)
+    out_k2 = vis_dir / f"umap_kmeans_k2_{encoder}.png"
+    out_k8 = vis_dir / f"umap_kmeans_k8_{encoder}.png"
 
     plot_umap(coords, labels=str_k2, out_path=out_k2,
               title=f"KMeans k=2 — {encoder} (n={_N_SAMPLE:,})")
