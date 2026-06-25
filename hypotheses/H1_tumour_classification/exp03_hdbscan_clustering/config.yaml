@@ -1,0 +1,39 @@
+experiment:
+  name: H1_exp03_hdbscan_clustering
+  hypothesis: H1
+  question: Q3
+  description: >
+    Unsupervised tissue compartment discovery via HDBSCAN.
+    All patches from all slides are projected to PCA space (retaining 85% variance,
+    max 20 components), then clustered with HDBSCAN. Clusters are expected to
+    correspond to tissue types: tumour, stroma, blood vessels, artefacts, etc.
+    Visualised with 2D + 3D UMAP, coloured (a) by cluster label and (b) by
+    ground-truth tumour annotation — to validate biological meaning of clusters.
+
+# One of: conch | uni2h
+encoder: conch
+
+inputs:
+  embeddings_root: E:/embeddings
+  geojson_dir: D:/College/Sem_5/HistoRag-BIMAP/WSI_PrimaryTumor_Annotations
+
+params:
+  pca:
+    n_components_max: 20          # hard cap on PCA dimensions
+    variance_threshold: 0.85      # keep fewest dims that explain this fraction
+
+  hdbscan:
+    min_cluster_size: 500         # minimum patches to form a cluster
+    min_samples: null             # null → same as min_cluster_size (hdbscan default)
+
+  umap:
+    n_neighbors: 15
+    min_dist: 0.1
+    random_state: 42
+    max_points: 50000             # subsample for UMAP visualisation
+
+  hdbscan_subsample: 200000       # patches fed to HDBSCAN without --full (local mode)
+  random_state: 42
+
+outputs:
+  dir: hypotheses/H1_tumour_classification/exp03_hdbscan_clustering/outputs/
