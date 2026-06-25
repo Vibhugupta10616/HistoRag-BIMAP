@@ -422,50 +422,64 @@ def compute_similarity_pairs(
 
 
 def plot_similarity_distribution(
-    within_sims: np.ndarray,
-    cross_sims: np.ndarray,
+    within_t: np.ndarray,
+    cross_t: np.ndarray,
     out_path: str | Path,
-    title: str = "Tumour Patch Similarity Distribution",
+    title: str = "Patch Similarity Distribution",
+    within_nt: np.ndarray | None = None,
+    cross_nt: np.ndarray | None = None,
 ) -> None:
     """
-    Histogram of within-site vs cross-site cosine similarities.
+    KDE distribution of within-site vs cross-site cosine similarities.
 
-    Takes pre-computed similarity arrays from compute_similarity_pairs so the
-    plot can be regenerated without re-running the expensive embedding scan.
+    When within_nt / cross_nt are provided, draws 4 curves (tumour + non-tumour)
+    on the same axis for direct comparison; otherwise draws 2 curves (tumour only).
+    Takes pre-computed arrays from compute_similarity_pairs so the plot can be
+    regenerated without re-running the expensive embedding scan.
     """
-    within_mean = float(within_sims.mean())
-    cross_mean  = float(cross_sims.mean())
-    gap = within_mean - cross_mean
+    four_curve = within_nt is not None and cross_nt is not None
 
-    # shared bin edges covering both distributions
-    all_sims = np.concatenate([within_sims, cross_sims])
+    all_arrays = [within_t, cross_t]
+    if four_curve:
+        all_arrays += [within_nt, cross_nt]
+    all_sims = np.concatenate(all_arrays)
     x_lo = max(0.0, float(all_sims.min()) - 0.02)
     x_hi = min(1.0, float(all_sims.max()) + 0.02)
     bins = np.linspace(x_lo, x_hi, 60)
     bin_centers = (bins[:-1] + bins[1:]) / 2
 
-    fig, ax = plt.subplots(figsize=(9, 5))
+    series = [
+        (within_t, "#e53935", "-",  f"Tumour – within-site  (μ={within_t.mean():.3f})"),
+        (cross_t,  "#1e88e5", "-",  f"Tumour – cross-site   (μ={cross_t.mean():.3f})"),
+    ]
+    if four_curve:
+        series += [
+            (within_nt, "#e53935", "--", f"Non-tumour – within-site  (μ={within_nt.mean():.3f})"),
+            (cross_nt,  "#1e88e5", "--", f"Non-tumour – cross-site   (μ={cross_nt.mean():.3f})"),
+        ]
 
-    colors = {"within": "#e53935", "cross": "#1e88e5"}
-    for sims, key, label in [
-        (within_sims, "within", f"Within-site  (mean={within_mean:.3f})"),
-        (cross_sims,  "cross",  f"Cross-site   (mean={cross_mean:.3f})"),
-    ]:
-        color = colors[key]
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    for sims, color, ls, label in series:
         counts, _ = np.histogram(sims, bins=bins)
-        ax.plot(bin_centers, counts, label=label, color=color, linewidth=2)
-        ax.fill_between(bin_centers, counts, alpha=0.15, color=color)
-        ax.axvline(sims.mean(), color=color, linestyle="--", linewidth=1.2, alpha=0.8)
+        ax.plot(bin_centers, counts, label=label, color=color, linestyle=ls, linewidth=2)
+        ax.fill_between(bin_centers, counts, alpha=0.10, color=color)
+        ax.axvline(float(sims.mean()), color=color, linestyle=ls, linewidth=1.0, alpha=0.6)
 
+    gap_t = float(within_t.mean()) - float(cross_t.mean())
+    annotation = f"Tumour gap = {gap_t:+.4f}"
+    if four_curve:
+        gap_nt = float(within_nt.mean()) - float(cross_nt.mean())
+        annotation += f"\nNon-tumour gap = {gap_nt:+.4f}"
     ax.annotate(
-        f"gap = {gap:+.4f}\n({'within > cross' if gap > 0 else 'cross > within'})",
+        annotation,
         xy=(0.97, 0.95), xycoords="axes fraction",
         ha="right", va="top", fontsize=9,
         bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="#888", alpha=0.8),
     )
 
     ax.set_xlabel(
-        "Cosine similarity between two tumour patches\n"
+        "Cosine similarity between two patches\n"
         "(0 = completely different directions,  1 = identical)",
         fontsize=10,
     )
