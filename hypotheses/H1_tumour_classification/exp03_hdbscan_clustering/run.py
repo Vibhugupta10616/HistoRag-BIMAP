@@ -3,18 +3,15 @@ H1 Experiment 03 — HDBSCAN Patch Clustering (Q3)
 
 Pipeline:
     1. Pass 1: Fit IncrementalPCA (n_components_max=20) slide by slide
-    2. Select n_components that retain variance_threshold (default 85%, cap 20)
+    2. Select n_components that retain variance_threshold (default 90%, cap 20)
     3. Pass 2: Transform all patches to PCA space; collect ground-truth tumour labels
-    4. HDBSCAN on PCA-reduced embeddings
-         --full (HPC): cluster all patches
-         default (local): subsample hdbscan_subsample patches first
+    4. HDBSCAN on ALL PCA-reduced embeddings (~640 MB at 8M × 20d — tractable)
     5. UMAP 2D + 3D + interactive HTML, two colour schemes:
          (a) HDBSCAN cluster label   (b) ground-truth tumour / non-tumour
     6. Cache arrays + plots + summary.json
 
 Usage:
     python run.py --encoder conch
-    python run.py --encoder uni2h --full            # HPC: cluster all patches
     python run.py --encoder conch --plots-only      # regenerate plots from cache
 """
 
@@ -89,7 +86,6 @@ def run(
     embeddings_root_override: str | None = None,
     geojson_dir_override: str | None = None,
     plots_only: bool = False,
-    full: bool = False,
 ) -> None:
     config_path = Path(config_path)
     with open(config_path) as f:
@@ -127,13 +123,12 @@ def run(
     random_state = int(cfg["params"].get("random_state", 42))
     n_comp_max   = int(pca_cfg["n_components_max"])
     var_thresh   = float(pca_cfg["variance_threshold"])
-    hdb_sub      = int(cfg["params"].get("hdbscan_subsample", 200_000))
     min_cls_size = int(hdbscan_cfg["min_cluster_size"])
     min_samples  = hdbscan_cfg.get("min_samples") or None
     umap_max     = int(umap_cfg.get("max_points", 50_000))
 
     patch_size = cfg["params"].get("patch_size") or detect_patch_size(encoder, embeddings_root)
-    print(f"\n[H1 exp03] encoder={encoder}  patch_size={patch_size}  full={full}")
+    print(f"\n[H1 exp03] encoder={encoder}  patch_size={patch_size}")
 
     # ── Pass 1: fit IncrementalPCA ────────────────────────────────────────────
     print(f"[H1 exp03] Pass 1 — fitting IncrementalPCA (n_components={n_comp_max})...")
@@ -171,35 +166,27 @@ def run(
     print(f"[H1 exp03] PCA embeddings: {all_pca.shape}  ({all_pca.nbytes/1e9:.2f} GB)")
 
     # ── HDBSCAN clustering ────────────────────────────────────────────────────
+    # PCA already reduced to ≤20d so running on all patches is tractable (~640 MB).
     rng = np.random.default_rng(random_state)
-
-    if full:
-        hdb_input   = all_pca
-        hdb_indices = np.arange(len(all_pca))
-        print(f"[H1 exp03] HDBSCAN on all {len(all_pca):,} patches (--full)...")
-    else:
-        n_sub       = min(hdb_sub, len(all_pca))
-        hdb_indices = rng.choice(len(all_pca), n_sub, replace=False)
-        hdb_input   = all_pca[hdb_indices]
-        print(f"[H1 exp03] HDBSCAN on subsample {n_sub:,} / {len(all_pca):,} patches...")
+    print(f"[H1 exp03] HDBSCAN on all {len(all_pca):,} PCA-reduced patches...")
 
     clusterer = hdbscan_lib.HDBSCAN(
         min_cluster_size=min_cls_size,
         min_samples=min_samples,
         core_dist_n_jobs=-1,
     )
-    cluster_labels = clusterer.fit_predict(hdb_input)
+    cluster_labels = clusterer.fit_predict(all_pca)
 
     n_clusters = int((np.unique(cluster_labels) > -1).sum())
     n_noise    = int((cluster_labels == -1).sum())
     print(f"[H1 exp03] HDBSCAN found {n_clusters} clusters, {n_noise:,} noise points")
 
     # ── UMAP visualisation subsample ─────────────────────────────────────────
-    n_viz     = min(umap_max, len(hdb_indices))
-    viz_sub   = rng.choice(len(hdb_indices), n_viz, replace=False)
-    viz_emb   = hdb_input[viz_sub]
-    viz_clust = cluster_labels[viz_sub]
-    viz_gt    = all_gt[hdb_indices[viz_sub]]
+    n_viz     = min(umap_max, len(all_pca))
+    viz_idx   = rng.choice(len(all_pca), n_viz, replace=False)
+    viz_emb   = all_pca[viz_idx]
+    viz_clust = cluster_labels[viz_idx]
+    viz_gt    = all_gt[viz_idx]
 
     umap_kwargs = dict(
         n_neighbors=umap_cfg.get("n_neighbors", 15),
@@ -230,8 +217,7 @@ def run(
         "n_patches_total":   total_patches,
         "pca_components":    n_components,
         "pca_variance_explained": round(explained, 4),
-        "hdbscan_full_mode": full,
-        "hdbscan_input_n":   int(len(hdb_input)),
+        "hdbscan_input_n":   int(len(all_pca)),
         "n_clusters":        n_clusters,
         "n_noise_patches":   n_noise,
         "min_cluster_size":  min_cls_size,
@@ -254,13 +240,9 @@ if __name__ == "__main__":
     parser.add_argument("--geojson-dir", default=None)
     parser.add_argument("--plots-only", action="store_true",
                         help="Regenerate plots from cached arrays; skip embedding scan.")
-    parser.add_argument("--full", action="store_true",
-                        help="Run HDBSCAN on all patches (HPC). "
-                             "Default: subsample hdbscan_subsample patches (local).")
     args = parser.parse_args()
     run(args.config,
         encoder_override=args.encoder,
         embeddings_root_override=args.embeddings_root,
         geojson_dir_override=args.geojson_dir,
-        plots_only=args.plots_only,
-        full=args.full)
+        plots_only=args.plots_only)

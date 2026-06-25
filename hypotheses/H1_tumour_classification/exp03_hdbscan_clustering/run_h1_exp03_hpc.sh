@@ -46,7 +46,6 @@ for ENC in conch uni2h; do
     echo ""
     echo "── H1 exp03  encoder=$ENC  $(date) ──"
     python hypotheses/H1_tumour_classification/exp03_hdbscan_clustering/run.py \
-        --full \
         --encoder "$ENC" \
         --embeddings-root "$EMB" \
         --geojson-dir "$GEO"

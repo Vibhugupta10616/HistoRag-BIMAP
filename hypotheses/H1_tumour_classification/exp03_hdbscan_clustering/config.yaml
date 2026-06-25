@@ -20,7 +20,7 @@ inputs:
 params:
   pca:
     n_components_max: 20          # hard cap on PCA dimensions
-    variance_threshold: 0.85      # keep fewest dims that explain this fraction
+    variance_threshold: 0.90      # keep fewest dims that explain this fraction
 
   hdbscan:
     min_cluster_size: 500         # minimum patches to form a cluster
@@ -32,7 +32,6 @@ params:
     random_state: 42
     max_points: 50000             # subsample for UMAP visualisation
 
-  hdbscan_subsample: 200000       # patches fed to HDBSCAN without --full (local mode)
   random_state: 42
 
 outputs:
