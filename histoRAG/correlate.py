@@ -449,28 +449,31 @@ def plot_similarity_distribution(
     bin_centers = (bins[:-1] + bins[1:]) / 2
 
     series = [
-        (within_t, "#e53935", "-",  f"Tumour – within-site  (μ={within_t.mean():.3f})"),
-        (cross_t,  "#1e88e5", "-",  f"Tumour – cross-site   (μ={cross_t.mean():.3f})"),
+        (within_t, "#e53935", "-",  "Tumour – within-site"),
+        (cross_t,  "#1e88e5", "-",  "Tumour – cross-site"),
     ]
     if four_curve:
         series += [
-            (within_nt, "#e53935", "--", f"Non-tumour – within-site  (μ={within_nt.mean():.3f})"),
-            (cross_nt,  "#1e88e5", "--", f"Non-tumour – cross-site   (μ={cross_nt.mean():.3f})"),
+            (within_nt, "#e53935", "--", "Non-tumour – within-site"),
+            (cross_nt,  "#1e88e5", "--", "Non-tumour – cross-site"),
         ]
 
     fig, ax = plt.subplots(figsize=(10, 5))
 
+    computed_modes = []
     for sims, color, ls, label in series:
         counts, _ = np.histogram(sims, bins=bins)
-        ax.plot(bin_centers, counts, label=label, color=color, linestyle=ls, linewidth=2)
+        mode = float(bin_centers[np.argmax(counts)])
+        computed_modes.append(mode)
+        ax.plot(bin_centers, counts, label=f"{label}  (mode={mode:.3f})",
+                color=color, linestyle=ls, linewidth=2)
         ax.fill_between(bin_centers, counts, alpha=0.10, color=color)
-        ax.axvline(float(sims.mean()), color=color, linestyle=ls, linewidth=1.0, alpha=0.6)
+        ax.axvline(mode, color=color, linestyle=ls, linewidth=1.0, alpha=0.6)
 
-    gap_t = float(within_t.mean()) - float(cross_t.mean())
+    gap_t = computed_modes[0] - computed_modes[1]
     annotation = f"Tumour gap = {gap_t:+.4f}"
     if four_curve:
-        gap_nt = float(within_nt.mean()) - float(cross_nt.mean())
-        annotation += f"\nNon-tumour gap = {gap_nt:+.4f}"
+        annotation += f"\nNon-tumour gap = {computed_modes[2] - computed_modes[3]:+.4f}"
     ax.annotate(
         annotation,
         xy=(0.97, 0.95), xycoords="axes fraction",
