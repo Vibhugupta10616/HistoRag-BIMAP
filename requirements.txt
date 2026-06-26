@@ -31,7 +31,6 @@ scipy==1.17.1
 
 # --- ML utilities ---
 scikit-learn==1.8.0
-hdbscan==0.8.40
 huggingface_hub==1.11.0
 tqdm==4.67.3
 pyyaml==6.0.3

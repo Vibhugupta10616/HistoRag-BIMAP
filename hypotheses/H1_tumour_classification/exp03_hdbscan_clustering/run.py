@@ -22,10 +22,10 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT))
 
-import hdbscan as hdbscan_lib
 import numpy as np
 import pandas as pd
 import yaml
+from sklearn.cluster import HDBSCAN as hdbscan_lib
 from sklearn.decomposition import IncrementalPCA
 
 from histoRAG.labels import tumour_labels_from_geojson
@@ -170,10 +170,10 @@ def run(
     rng = np.random.default_rng(random_state)
     print(f"[H1 exp03] HDBSCAN on all {len(all_pca):,} PCA-reduced patches...")
 
-    clusterer = hdbscan_lib.HDBSCAN(
+    clusterer = hdbscan_lib(
         min_cluster_size=min_cls_size,
         min_samples=min_samples,
-        core_dist_n_jobs=-1,
+        n_jobs=-1,
     )
     cluster_labels = clusterer.fit_predict(all_pca)
 
