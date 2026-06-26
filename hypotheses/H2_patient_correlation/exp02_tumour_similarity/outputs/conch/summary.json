@@ -5,12 +5,21 @@
   "n_patches_total": 8212546,
   "n_tumour_patches": 415398,
   "tumour_pct_overall": 5.06,
+  "n_nontumour_patches": 7797148,
+  "nontumour_pct_overall": 94.94,
   "kde_sample_per_site": 6000,
-  "outputs": [
-    "umap_tumour_patches_by_site.png",
-    "umap_tumour_patches_by_site_3d.png",
-    "umap_tumour_patches_by_site_3d.html",
-    "similarity_distribution.png",
-    "summary.json"
-  ]
+  "outputs": {
+    "tumour": [
+      "umap_patches_by_site.png",
+      "umap_patches_by_site_3d.png",
+      "umap_patches_by_site_3d.html",
+      "similarity_distribution.png"
+    ],
+    "nontumour": [
+      "umap_patches_by_site.png",
+      "umap_patches_by_site_3d.png",
+      "umap_patches_by_site_3d.html",
+      "similarity_distribution.png"
+    ]
+  }
 }
