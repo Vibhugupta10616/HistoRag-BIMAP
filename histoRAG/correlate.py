@@ -450,11 +450,11 @@ def plot_similarity_distribution(
 
     series = [
         (within_t, "#e53935", "-",  "Tumour – within-site"),
-        (cross_t,  "#1e88e5", "-",  "Tumour – cross-site"),
+        (cross_t,  "#e53935", "--", "Tumour – cross-site"),
     ]
     if four_curve:
         series += [
-            (within_nt, "#e53935", "--", "Non-tumour – within-site"),
+            (within_nt, "#1e88e5", "-",  "Non-tumour – within-site"),
             (cross_nt,  "#1e88e5", "--", "Non-tumour – cross-site"),
         ]
 
