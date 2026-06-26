@@ -65,14 +65,12 @@ def _plots(tumour_dir: Path, nontumour_dir: Path, encoder: str) -> None:
     within_nt = np.load(nontumour_dir / "cache_within_sims.npy")
     cross_nt  = np.load(nontumour_dir / "cache_cross_sims.npy")
 
-    sim_out = tumour_dir / "similarity_distribution.png"
     plot_similarity_distribution(
         within_t=within_t, cross_t=cross_t,
         within_nt=within_nt, cross_nt=cross_nt,
-        out_path=sim_out,
+        out_path=tumour_dir.parent / "similarity_distribution.png",
         title=f"Patch Similarity: Tumour vs Non-tumour ({encoder})",
     )
-    shutil.copy(sim_out, nontumour_dir / "similarity_distribution.png")
     print(f"[H2 exp02] Plots regenerated from cache -> {tumour_dir.parent}")
 
 
@@ -294,14 +292,12 @@ def run(
     print("[H2 exp02] Intermediate arrays cached.")
 
     # ---------------------------------------------------- 4-curve KDE plot ---
-    sim_out = tumour_dir / "similarity_distribution.png"
     plot_similarity_distribution(
         within_t=within_t, cross_t=cross_t,
         within_nt=within_nt, cross_nt=cross_nt,
-        out_path=sim_out,
+        out_path=base_dir / "similarity_distribution.png",
         title=f"Patch Similarity: Tumour vs Non-tumour ({encoder})",
     )
-    shutil.copy(sim_out, nontumour_dir / "similarity_distribution.png")
 
     # --------------------------------------------------------------- summary
     summary = {
@@ -315,18 +311,9 @@ def run(
         "nontumour_pct_overall":  round(n_nontumour_total / total_patches * 100, 2),
         "kde_sample_per_site":    kde_sample,
         "outputs": {
-            "tumour": [
-                "umap_patches_by_site.png",
-                "umap_patches_by_site_3d.png",
-                "umap_patches_by_site_3d.html",
-                "similarity_distribution.png",
-            ],
-            "nontumour": [
-                "umap_patches_by_site.png",
-                "umap_patches_by_site_3d.png",
-                "umap_patches_by_site_3d.html",
-                "similarity_distribution.png",
-            ],
+            "similarity_distribution.png": "4-curve KDE (tumour + non-tumour)",
+            "tumour": ["umap_patches_by_site.png", "umap_patches_by_site_3d.png", "umap_patches_by_site_3d.html"],
+            "nontumour": ["umap_patches_by_site.png", "umap_patches_by_site_3d.png", "umap_patches_by_site_3d.html"],
         },
     }
     with open(base_dir / "summary.json", "w") as f:

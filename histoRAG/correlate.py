@@ -476,8 +476,8 @@ def plot_similarity_distribution(
         annotation += f"\nNon-tumour gap = {computed_modes[2] - computed_modes[3]:+.4f}"
     ax.annotate(
         annotation,
-        xy=(0.97, 0.95), xycoords="axes fraction",
-        ha="right", va="top", fontsize=9,
+        xy=(0.03, 0.95), xycoords="axes fraction",
+        ha="left", va="top", fontsize=9,
         bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="#888", alpha=0.8),
     )
 
