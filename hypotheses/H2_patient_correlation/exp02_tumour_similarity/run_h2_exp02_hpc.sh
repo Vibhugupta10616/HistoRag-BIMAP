@@ -21,6 +21,7 @@
 # ── SLURM directives ─────────────────────────────────────────────────────────
 #SBATCH --job-name=h2_exp02_sim
 #SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
 #SBATCH --time=10:00:00
 #SBATCH --output=%x_%j.log
 #SBATCH --partition=a100

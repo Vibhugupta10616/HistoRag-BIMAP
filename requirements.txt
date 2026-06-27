@@ -23,6 +23,9 @@ Pillow==12.2.0
 # --- Retrieval ---
 faiss-cpu==1.13.2
 
+# --- Embedding I/O ---
+h5py
+
 # --- Data handling ---
 numpy==2.4.4
 pandas==3.0.2
@@ -38,6 +41,7 @@ pyyaml==6.0.3
 # --- Visualisation & app ---
 streamlit==1.56.0
 matplotlib==3.10.9
+plotly
 umap-learn==0.5.12
 
 # --- Testing ---

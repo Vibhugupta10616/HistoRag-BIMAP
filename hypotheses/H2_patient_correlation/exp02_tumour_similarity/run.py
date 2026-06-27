@@ -247,13 +247,19 @@ def run(
         kept = sum(len(a) for a in nt_emb_by_site.get(site, []))
         print(f"[H2 exp02] Non-tumour site={site}: kept {kept:,} / {seen:,} patches")
 
+    tumour_embeddings = _normalize(np.concatenate(tumour_emb_parts, axis=0).astype(np.float32))
+    del tumour_emb_parts
+    tumour_manifest = pd.concat(tumour_manifest_parts, ignore_index=True)
+    del tumour_manifest_parts
+
     nt_emb_flat  = [arr for parts in nt_emb_by_site.values()  for arr in parts]
     nt_rows_flat = [df  for parts in nt_rows_by_site.values() for df  in parts]
+    del nt_emb_by_site, nt_rows_by_site
 
-    tumour_embeddings    = _normalize(np.concatenate(tumour_emb_parts, axis=0).astype(np.float32))
-    nontumour_embeddings = _normalize(np.concatenate(nt_emb_flat,      axis=0).astype(np.float32))
-    tumour_manifest    = pd.concat(tumour_manifest_parts, ignore_index=True)
-    nontumour_manifest = pd.concat(nt_rows_flat,          ignore_index=True)
+    nontumour_embeddings = _normalize(np.concatenate(nt_emb_flat, axis=0).astype(np.float32))
+    del nt_emb_flat
+    nontumour_manifest = pd.concat(nt_rows_flat, ignore_index=True)
+    del nt_rows_flat
 
     n_tumour_total    = len(tumour_manifest)
     n_nontumour_total = len(nontumour_manifest)

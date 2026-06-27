@@ -1,0 +1,25 @@
+# HistoRAG-BIMAP — HPC requirements for hypothesis experiments (H1, H2)
+# Assumes embeddings are pre-computed (see HPC branch for embedding pipeline).
+# torch / torchvision not needed here — no model inference.
+#
+# Install on cluster:
+#   pip install -r requirements_hpc.txt
+
+# --- Embedding I/O ---
+h5py
+
+# --- Data handling ---
+numpy==2.4.4
+pandas==3.0.2
+scipy==1.17.1
+
+# --- ML / clustering ---
+scikit-learn==1.8.0        # includes HDBSCAN, KMeans, IncrementalPCA, MiniBatchKMeans
+umap-learn==0.5.12
+
+# --- Visualisation ---
+matplotlib==3.10.9
+plotly
+
+# --- Utilities ---
+pyyaml==6.0.3

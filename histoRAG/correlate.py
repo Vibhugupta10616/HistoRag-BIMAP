@@ -2,15 +2,11 @@
 Patient correlation analysis utilities for H2 hypotheses.
 
 Provides:
-  - aggregate_by_patient:       mean-pool patch embeddings per patient -> 1 vector/patient
-  - select_centroid_patches:    select N patches closest to patient tumour centroid
   - correlation_matrix:         N×N cosine similarity matrix
   - compute_umap:               2-D UMAP projection
   - plot_umap:                  scatter plot coloured by label
   - plot_heatmap:               correlation heatmap ordered by group (exposes block-diagonal)
   - plot_similarity_distribution: within-site vs cross-site KDE plot
-  - tumour_patch_counts:        count tumour patches per patient
-  - decide_aggregation:         adaptive rule — aggregate or use individual patches
 
 All plotting functions save PNG files and print the output path; they do not
 show interactive windows (non-interactive Agg backend).
@@ -26,79 +22,6 @@ import numpy as np
 import pandas as pd
 from scipy.stats import gaussian_kde
 from umap import UMAP
-
-
-# ---------------------------------------------------------------------------
-# Embedding aggregation
-# ---------------------------------------------------------------------------
-
-def aggregate_by_patient(
-    manifest: pd.DataFrame,
-    embeddings: np.ndarray,
-    group_col: str = "slide_id",
-    method: str = "mean",
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Mean-pool patch embeddings per patient (or per any group column) and
-    re-normalize the result to unit length so cosine similarity == dot product.
-
-    This is a generalized version of histoRAG.embed.aggregate_slide_embeddings
-    that works with any grouping column (slide_id, patient_id, etc.).
-
-    Args:
-        manifest:    patch manifest DataFrame, rows aligned to embeddings.
-        embeddings:  (N_patches, dim) float32; ideally already L2-normalized.
-        group_col:   manifest column to group by. Default 'slide_id' (1 WSI = 1 patient).
-        method:      aggregation method; only 'mean' is supported.
-
-    Returns:
-        (patient_embeddings, patient_ids)
-          patient_embeddings: (N_patients, dim) float32, L2-normalized
-          patient_ids:        (N_patients,) array of group values, same order as rows
-    """
-    if method != "mean":
-        raise NotImplementedError(
-            f"Aggregation method '{method}' is not implemented. Use 'mean'."
-        )
-
-    group_ids_all = manifest[group_col].values
-    unique_ids = list(dict.fromkeys(group_ids_all))  # preserves first-occurrence order
-
-    agg_rows = []
-    for gid in unique_ids:
-        mask = group_ids_all == gid
-        mean_vec = embeddings[mask].mean(axis=0)
-        agg_rows.append(mean_vec)
-
-    agg = np.stack(agg_rows, axis=0).astype(np.float32)
-
-    # re-normalize to unit length (mean-pooling breaks L2-normalization)
-    norms = np.linalg.norm(agg, axis=1, keepdims=True)
-    norms = np.where(norms == 0, 1.0, norms)
-    agg = agg / norms
-
-    return agg, np.array(unique_ids)
-
-
-def select_centroid_patches(embeddings: np.ndarray, n: int) -> np.ndarray:
-    """
-    Select the N patches closest (by L2 distance) to the mean of the embedding cloud.
-
-    The centroid is used only for ranking — it is never stored or returned.
-    If the patient has <= n patches, all indices are returned unchanged.
-
-    Args:
-        embeddings: (M, dim) float32 tumour patches for one patient.
-        n:          number of patches to keep.
-
-    Returns:
-        (min(n, M),) integer indices of the selected patches.
-    """
-    if len(embeddings) <= n:
-        return np.arange(len(embeddings))
-    centroid = embeddings.mean(axis=0)
-    dists = np.linalg.norm(embeddings - centroid, axis=1)
-    return np.argsort(dists)[:n]
 
 
 # ---------------------------------------------------------------------------
@@ -309,7 +232,7 @@ def plot_heatmap(
     plt.colorbar(im, ax=ax, label="Cosine Similarity", shrink=0.8)
 
     # boundary lines and tick positions scaled to display coordinates
-    for s, e in zip(block_starts[1:], block_ends[:-1]):
+    for e in block_ends[:-1]:
         boundary = (e + 0.5) * scale
         ax.axhline(y=boundary, color="white", linewidth=1.5)
         ax.axvline(x=boundary, color="white", linewidth=1.5)
@@ -495,57 +418,6 @@ def plot_similarity_distribution(
     plt.close(fig)
     print(f"[correlate] Similarity distribution saved -> {out_path}")
 
-
-# ---------------------------------------------------------------------------
-# Adaptive aggregation helpers (H2 Q2)
-# ---------------------------------------------------------------------------
-
-def tumour_patch_counts(
-    manifest: pd.DataFrame,
-    tumour_labels: pd.Series,
-) -> pd.Series:
-    """
-    Count the number of tumour patches per patient (slide_id).
-
-    Args:
-        manifest:      patch manifest with column 'slide_id'.
-        tumour_labels: per-patch string labels aligned to manifest; 'tumour' or 'other'.
-
-    Returns:
-        pd.Series mapping slide_id -> count of tumour patches (sorted descending).
-    """
-    tumour_mask = tumour_labels == "tumour"
-    return manifest.loc[tumour_mask.values, "slide_id"].value_counts()
-
-
-def decide_aggregation(counts: pd.Series, threshold: int = 20) -> str:
-    """
-    Choose whether to aggregate tumour patches per patient or keep them individual.
-
-    Rule:
-      - If the MEDIAN tumour patch count across patients >= threshold -> aggregate
-        (mean-pool per patient -> patient × patient correlation matrix)
-      - Otherwise -> keep individual patches
-        (patch × patch correlation matrix, rows/cols grouped by patient)
-
-    Rationale: mean-pooling with very few patches (< ~10) dilutes the embedding
-    signal and can make different patients look artificially similar.
-
-    Args:
-        counts:    per-patient tumour patch counts from tumour_patch_counts().
-        threshold: median count threshold; default 20.
-
-    Returns:
-        'patient' (aggregate) or 'patch' (keep individual)
-    """
-    median_count = float(counts.median())
-    decision = "patient" if median_count >= threshold else "patch"
-    print(
-        f"[correlate] Tumour patches per patient: "
-        f"min={counts.min()}, median={median_count:.1f}, max={counts.max()} "
-        f"-> aggregation mode: '{decision}'"
-    )
-    return decision
 
 
 # ---------------------------------------------------------------------------

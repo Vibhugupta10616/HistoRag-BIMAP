@@ -19,7 +19,7 @@ import numpy as np
 import yaml
 from sklearn.cluster import KMeans
 
-from histoRAG.loader import iter_encoder
+from histoRAG.loader import count_encoder_patches, iter_encoder
 from histoRAG.correlate import compute_umap, plot_umap
 
 _HERE      = Path(__file__).parent
@@ -30,22 +30,15 @@ _RANDOM    = 42
 
 
 def _subsample(encoder: str, embeddings_root: str, n: int) -> np.ndarray:
-    """Stream slides, reservoir-sample n patches, return L2-normalised array."""
+    """Stream slides, proportionally sample n patches, return L2-normalised array."""
     rng = np.random.default_rng(_RANDOM)
-    reservoir: list[np.ndarray] = []
-    seen = 0
-
+    total = sum(count_encoder_patches(encoder, embeddings_root).values())
+    parts = []
     for emb, _ in iter_encoder(encoder, embeddings_root):
-        for row in emb:
-            seen += 1
-            if len(reservoir) < n:
-                reservoir.append(row)
-            else:
-                j = int(rng.integers(0, seen))
-                if j < n:
-                    reservoir[j] = row
-
-    arr = np.array(reservoir, dtype=np.float32)
+        quota = max(1, round(n * len(emb) / total))
+        idx = rng.choice(len(emb), min(quota, len(emb)), replace=False)
+        parts.append(emb[idx])
+    arr = np.concatenate(parts, axis=0, dtype=np.float32)
     norms = np.linalg.norm(arr, axis=1, keepdims=True)
     return arr / np.where(norms == 0, 1.0, norms)
 

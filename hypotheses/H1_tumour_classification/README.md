@@ -31,12 +31,13 @@ See `histoRAG/labels.py → tumour_labels_from_geojson`.
 
 ---
 
-## Two experiments
+## Three experiments
 
-| Folder | k | Question answered |
+| Folder | Method | Question answered |
 |---|---|---|
-| `exp01_kmeans_k2` | 2 | Is tumour the **dominant** axis of variation? |
-| `exp02_overcluster_assign` | 8 | Is tumour signal **present at all**, even if not dominant? |
+| `exp01_kmeans_k2` | K-means k=2 | Is tumour the **dominant** axis of variation? |
+| `exp02_overcluster_assign` | K-means k=8 | Is tumour signal **present at all**, even if not dominant? |
+| `exp03_hdbscan_clustering` | HDBSCAN + IncrementalPCA | What is the natural cluster structure? How does it align with tumour labels? |
 
 **Interpretation matrix:**
 
@@ -52,7 +53,7 @@ groups, giving tumour a chance to be recovered even in a weaker encoder.
 
 ---
 
-## Results (full dataset, MiniBatchKMeans, HPC)
+## Results (full dataset, HPC)
 
 **Dataset**: 8.21M patches (CLIP/CONCH) · 2.07M patches (UNI) across 4 tissue sites.
 **Tumour prevalence**: ~5% — baseline precision if a model labels everything as tumour.
@@ -106,9 +107,7 @@ Implemented in `histoRAG/classify.py → explain_dimensions`.
 3. Per dimension: `effect_size = |centroid_tumour - centroid_other| / pooled_std`
 4. Rank dimensions by effect size (Cohen's d) — higher = more tumour-discriminative
 
-XAI is computed in `--full` mode only (requires all embeddings in memory simultaneously).
-Output is saved under `summary.json → xai` with keys `top_dims`, `effect_sizes`,
-`tumour_centroid`, `other_centroid`.
+XAI requires all embeddings in memory simultaneously, so it is not computed in the two-pass streaming pipeline used by exp01/exp02. The results below were produced from a one-shot full-load run on HPC. Output is saved under `summary.json → xai` with keys `top_dims`, `effect_sizes`, `tumour_centroid`, `other_centroid`.
 
 ### XAI Results (full dataset, HPC)
 
@@ -157,26 +156,53 @@ buried tumour signal at k=8.
 
 ---
 
-## Shared module
+## Shared modules
 
 `histoRAG/classify.py`:
-- `fit_kmeans` / `fit_minibatch_kmeans` — clustering
+- `fit_kmeans` — clustering
 - `match_clusters_to_labels` — majority-vote cluster → tumour/other mapping
 - `classification_metrics` — Precision, Recall, F1
+- `grouped_metrics` — per-site and per-WSI breakdown
 - `explain_dimensions` — XAI via centroid difference (Cohen's d per dimension)
+
+Each experiment has its own self-contained `run.py`:
+- `exp01_kmeans_k2/run.py` — two-pass KMeans k=2 pipeline
+- `exp02_overcluster_assign/run.py` — two-pass KMeans k=8 pipeline
+- `exp03_hdbscan_clustering/run.py` — PCA + HDBSCAN pipeline
+
+**Output structure** (per encoder):
+```
+outputs/{encoder}/
+  summary_{encoder}.json
+  cache/   kmeans_cluster_ids.npy  kmeans_true_labels.npy  kmeans_predicted.npy
+           manifest.parquet  umap_emb.npy  umap_coords_2d.npy  umap_coords_3d.npy
+           viz_cluster_labels.npy  viz_gt_labels.npy
+  vis/     umap_by_cluster.png  umap_by_cluster_3d.png  umap_by_cluster_3d.html
+           umap_by_groundtruth.png  umap_by_groundtruth_3d.png  umap_by_groundtruth_3d.html
+```
 
 ---
 
 ## Running
 
 ```bash
-# Local (subsample mode — fast, no XAI)
-python hypotheses/H1_tumour_classification/exp01_kmeans_k2/run.py
-python hypotheses/H1_tumour_classification/exp02_overcluster_assign/run.py
+# exp01 / exp02 — three run modes each
+python hypotheses/H1_tumour_classification/exp01_kmeans_k2/run.py --encoder conch
+python hypotheses/H1_tumour_classification/exp01_kmeans_k2/run.py --encoder conch --skip-kmeans  # rerun UMAP + plots
+python hypotheses/H1_tumour_classification/exp01_kmeans_k2/run.py --encoder conch --plots-only   # replot only
 
-# HPC (full dataset + XAI)
-sbatch hypotheses/H1_tumour_classification/run_h1_hpc.sh        # all encoders
-sbatch hypotheses/H1_tumour_classification/run_h1_uni_hpc.sh    # UNI only
+python hypotheses/H1_tumour_classification/exp02_overcluster_assign/run.py --encoder conch
+python hypotheses/H1_tumour_classification/exp02_overcluster_assign/run.py --encoder conch --skip-kmeans
+python hypotheses/H1_tumour_classification/exp02_overcluster_assign/run.py --encoder conch --plots-only
+
+# HPC — all encoders, exp01 + exp02 in one job
+sbatch hypotheses/H1_tumour_classification/run_h1_hpc.sh
+
+# exp03 — HDBSCAN (same three modes)
+python hypotheses/H1_tumour_classification/exp03_hdbscan_clustering/run.py --encoder conch
+python hypotheses/H1_tumour_classification/exp03_hdbscan_clustering/run.py --encoder conch --skip-hdbscan
+python hypotheses/H1_tumour_classification/exp03_hdbscan_clustering/run.py --encoder conch --plots-only
+sbatch hypotheses/H1_tumour_classification/exp03_hdbscan_clustering/run_h1_exp03_hpc.sh
 ```
 
 ---

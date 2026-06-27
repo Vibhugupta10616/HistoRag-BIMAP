@@ -2,7 +2,7 @@
 # ============================================================================
 # SLURM job — H1 hypothesis (KMeans k=2 and k=8) on COMPLETE dataset
 #
-# Fits MiniBatchKMeans on ALL patches for each encoder (no subsampling).
+# Fits KMeans on a proportional subsample of patches for each encoder.
 # Writes results to:
 #   hypotheses/H1_tumour_classification/exp01_kmeans_k2/outputs/<encoder>/
 #   hypotheses/H1_tumour_classification/exp02_overcluster_assign/outputs/<encoder>/
@@ -52,7 +52,6 @@ for ENC in clip-vitb16 conch uni2h; do
     echo ""
     echo "── exp01 k=2  encoder=$ENC  $(date) ──"
     python hypotheses/H1_tumour_classification/exp01_kmeans_k2/run.py \
-        --full \
         --encoder "$ENC" \
         --embeddings-root "$EMB" \
         --geojson-dir "$GEO"
@@ -60,7 +59,6 @@ for ENC in clip-vitb16 conch uni2h; do
     echo ""
     echo "── exp02 k=8  encoder=$ENC  $(date) ──"
     python hypotheses/H1_tumour_classification/exp02_overcluster_assign/run.py \
-        --full \
         --encoder "$ENC" \
         --embeddings-root "$EMB" \
         --geojson-dir "$GEO"

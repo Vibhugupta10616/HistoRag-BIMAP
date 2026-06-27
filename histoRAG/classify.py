@@ -7,7 +7,6 @@ Approach:
   - Measure how well the encoder's embedding space naturally separates tumour tissue.
 
 Provides:
-  - cluster_embeddings:        K-means on patch embeddings -> per-patch cluster ids
   - match_clusters_to_labels:  majority-vote map from cluster ids to tumour/other (0/1)
   - classification_metrics:    Accuracy, Precision, Recall, F1 (vs ground truth)
   - cluster_summary:           per-cluster GeoJSON tumour percentage + assigned label
@@ -17,40 +16,13 @@ Provides:
 
 import numpy as np
 import pandas as pd
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, MiniBatchKMeans
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 
 
 # ---------------------------------------------------------------------------
 # Clustering
 # ---------------------------------------------------------------------------
-
-def cluster_embeddings(
-    embeddings: np.ndarray,
-    n_clusters: int = 2,
-    random_state: int = 42,
-    n_init: int = 10,
-) -> np.ndarray:
-    """
-    Cluster patch embeddings with K-means (unsupervised — no labels used).
-
-    Args:
-        embeddings:   (N, dim) float32 patch embeddings.
-        n_clusters:   number of clusters. Use 2 for exp01 (dominant-axis test),
-                      8 for exp02 (over-cluster to recover buried tumour signal).
-        random_state: seed for reproducibility.
-        n_init:       number of times K-means algorithm runs with different centroid seeds.
-                      Higher = more stable but slower. Default 10; use 3-5 for large datasets.
-
-    Returns:
-        (N,) int array of cluster ids in range [0, n_clusters).
-    """
-    km = KMeans(
-        n_clusters=n_clusters,
-        random_state=random_state,
-        n_init=n_init,
-    )
-    return km.fit_predict(embeddings).astype(np.int32)
-
 
 def fit_kmeans(
     sample_embeddings: np.ndarray,
@@ -64,8 +36,7 @@ def fit_kmeans(
     Use km.predict(chunk) to assign cluster IDs to arbitrary batches without
     holding all embeddings in memory at once.
     """
-    from sklearn.cluster import KMeans as _KMeans
-    km = _KMeans(n_clusters=n_clusters, random_state=random_state, n_init=n_init)
+    km = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=n_init)
     km.fit(sample_embeddings)
     return km
 
@@ -96,7 +67,6 @@ def fit_minibatch_kmeans(
     Returns:
         Fitted MiniBatchKMeans model. Call .predict(embeddings) to assign IDs.
     """
-    from sklearn.cluster import MiniBatchKMeans
     mbk = MiniBatchKMeans(
         n_clusters=n_clusters,
         random_state=random_state,
@@ -134,15 +104,9 @@ def match_clusters_to_labels(
     # minority class (< 50% globally), where a fixed 0.5 threshold would label
     # every cluster "other" and produce precision=recall=0.
     global_tumour_rate = true_labels.mean()
-    unique_clusters = np.unique(cluster_ids)
-    cluster_to_label = {}
-    for cid in unique_clusters:
+    for cid in np.unique(cluster_ids):
         mask = cluster_ids == cid
-        cluster_to_label[cid] = int(true_labels[mask].mean() > global_tumour_rate)
-    
-    # Vectorized assignment
-    for cid, label in cluster_to_label.items():
-        predicted[cluster_ids == cid] = label
+        predicted[mask] = int(true_labels[mask].mean() > global_tumour_rate)
 
     return predicted
 
@@ -168,36 +132,17 @@ def classification_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
     y_pred = np.asarray(y_pred, dtype=np.int32)
 
     if len(y_true) == 0:
-        return {
-            "accuracy": 0.0,
-            "precision": 0.0,
-            "recall": 0.0,
-            "f1": 0.0,
-            "tumour_prevalence": 0.0,
-        }
-    
-    correct = y_true == y_pred
-    accuracy = float(correct.mean())
-    
-    # True positives, false positives, false negatives
-    tp = float(((y_pred == 1) & (y_true == 1)).sum())
-    fp = float(((y_pred == 1) & (y_true == 0)).sum())
-    fn = float(((y_pred == 0) & (y_true == 1)).sum())
-    
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    f1 = (
-        2 * precision * recall / (precision + recall)
-        if (precision + recall) > 0 else 0.0
+        return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0, "tumour_prevalence": 0.0}
+
+    p, r, f, _ = precision_recall_fscore_support(
+        y_true, y_pred, labels=[1], average="binary", zero_division=0
     )
-    tumour_prevalence = float((y_true == 1).mean())
-    
     return {
-        "accuracy":          accuracy,
-        "precision":         precision,
-        "recall":            recall,
-        "f1":                f1,
-        "tumour_prevalence": tumour_prevalence,
+        "accuracy":          float(accuracy_score(y_true, y_pred)),
+        "precision":         float(p),
+        "recall":            float(r),
+        "f1":                float(f),
+        "tumour_prevalence": float((y_true == 1).mean()),
     }
 
 
@@ -214,13 +159,13 @@ def cluster_summary(cluster_ids: np.ndarray, true_labels: np.ndarray) -> pd.Data
 
     global_tumour_rate = true_labels.mean() * 100
     rows = []
-    for cid in sorted(np.unique(cluster_ids).tolist()):
+    for cid in np.unique(cluster_ids):
         mask = cluster_ids == cid
         tumour_pct = float(true_labels[mask].mean() * 100)
         rows.append({
-            "cluster": cid,
-            "patches": int(mask.sum()),
-            "geojson_tumour_pct": round(tumour_pct, 2),
+            "cluster_id":    cid,
+            "n_patches":     int(mask.sum()),
+            "gt_tumour_pct": round(tumour_pct, 2),
             "assigned_label": "tumour" if tumour_pct > global_tumour_rate else "other",
         })
 
@@ -245,35 +190,29 @@ def grouped_metrics(
     true_labels = np.asarray(true_labels, dtype=np.int32)
     predicted_labels = np.asarray(predicted_labels, dtype=np.int32)
 
+    by_wsi = group_col == "slide_id"
     rows = []
     for group_value, group in manifest.groupby(group_col, sort=True):
         idx = manifest.index.get_indexer(group.index)
-        metrics = classification_metrics(true_labels[idx], predicted_labels[idx])
-
-        if group_col == "slide_id":
+        m = classification_metrics(true_labels[idx], predicted_labels[idx])
+        metric_cols = {k: round(m[k], 4) for k in ("accuracy", "precision", "recall", "f1")}
+        if by_wsi:
             row = {
                 "slide_id": group_value,
                 "site": str(group["site"].iloc[0]) if "site" in group else "",
                 "patches": int(len(group)),
                 "tumour_patches": int(true_labels[idx].sum()),
                 "predicted_tumour_patches": int(predicted_labels[idx].sum()),
-                "accuracy": round(metrics["accuracy"], 4),
-                "precision": round(metrics["precision"], 4),
-                "recall": round(metrics["recall"], 4),
-                "f1": round(metrics["f1"], 4),
+                **metric_cols,
             }
         else:
             row = {
                 group_col: group_value,
                 "slides": int(group["slide_id"].nunique()),
                 "patches": int(len(group)),
-                "tumour_pct": round(metrics["tumour_prevalence"] * 100, 2),
-                "accuracy": round(metrics["accuracy"], 4),
-                "precision": round(metrics["precision"], 4),
-                "recall": round(metrics["recall"], 4),
-                "f1": round(metrics["f1"], 4),
+                "tumour_pct": round(m["tumour_prevalence"] * 100, 2),
+                **metric_cols,
             }
-
         rows.append(row)
 
     return pd.DataFrame(rows)
@@ -314,18 +253,20 @@ def explain_dimensions(
     true_labels = np.asarray(true_labels, dtype=np.int32)
 
     tumour_mask = true_labels == 1
-    other_mask  = true_labels == 0
 
     emb_tumour = embeddings[tumour_mask]
-    emb_other  = embeddings[other_mask]
+    n_t   = len(emb_tumour)
+    mu_t  = emb_tumour.mean(axis=0)
+    var_t = emb_tumour.var(axis=0)
+    del emb_tumour   # free before allocating other subset
 
-    mu_t = emb_tumour.mean(axis=0)   # (dim,)
-    mu_o = emb_other.mean(axis=0)    # (dim,)
+    emb_other = embeddings[~tumour_mask]
+    n_o   = len(emb_other)
+    mu_o  = emb_other.mean(axis=0)
+    var_o = emb_other.var(axis=0)
+    del emb_other
 
     # Pooled std — adds small epsilon to avoid division by zero
-    n_t, n_o = len(emb_tumour), len(emb_other)
-    var_t = emb_tumour.var(axis=0)
-    var_o = emb_other.var(axis=0)
     pooled_std = np.sqrt((var_t * n_t + var_o * n_o) / (n_t + n_o)) + 1e-8
 
     effect_size = np.abs(mu_t - mu_o) / pooled_std   # Cohen's d per dimension
