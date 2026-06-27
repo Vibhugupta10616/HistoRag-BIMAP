@@ -126,3 +126,4 @@ svs_to_png/
 debug/
 logs/
 hpcenv/
+**.npy
