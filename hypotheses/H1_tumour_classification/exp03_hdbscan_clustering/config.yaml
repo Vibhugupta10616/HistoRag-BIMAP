@@ -25,6 +25,7 @@ params:
   hdbscan:
     min_cluster_size: 500         # minimum patches to form a cluster
     min_samples: null             # null → same as min_cluster_size (hdbscan default)
+    site_cap: 120000              # max patches per anatomical site before HDBSCAN (~480k total)
 
   umap:
     n_neighbors: 15
