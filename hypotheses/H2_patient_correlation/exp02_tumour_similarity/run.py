@@ -42,28 +42,27 @@ from histoRAG.correlate import (
 )
 
 
-def _plots(tumour_dir: Path, nontumour_dir: Path, encoder: str) -> None:
+def _plots(tumour_dir: Path, nontumour_dir: Path, cache_dir: Path, encoder: str) -> None:
     """Regenerate all plots from cached .npy files. Fast — no embedding scan."""
-    for cls_dir, label in [(tumour_dir, "tumour"), (nontumour_dir, "nontumour")]:
-        umap_coords_2d = np.load(cls_dir / "cache_umap_coords_2d.npy")
-        umap_coords_3d = np.load(cls_dir / "cache_umap_coords_3d.npy")
-        umap_sites     = np.load(cls_dir / "cache_umap_sites.npy", allow_pickle=True)
+    for plot_dir, label in [(tumour_dir, "tumour"), (nontumour_dir, "nontumour")]:
+        umap_coords_2d = np.load(cache_dir / f"{label}_umap_coords_2d.npy")
+        umap_coords_3d = np.load(cache_dir / f"{label}_umap_coords_3d.npy")
+        umap_sites     = np.load(cache_dir / f"{label}_umap_sites.npy", allow_pickle=True)
 
         plot_umap(umap_coords_2d, labels=umap_sites,
-                  out_path=cls_dir / "umap_patches_by_site.png",
+                  out_path=plot_dir / "umap_patches_by_site.png",
                   title=f"{label.capitalize()} Patch Embeddings ({encoder})  —  2D UMAP by site")
         plot_umap_3d(umap_coords_3d, labels=umap_sites,
-                     out_path=cls_dir / "umap_patches_by_site_3d.png",
+                     out_path=plot_dir / "umap_patches_by_site_3d.png",
                      title=f"{label.capitalize()} Patch Embeddings 3D ({encoder})")
         plot_umap_3d_interactive(umap_coords_3d, labels=umap_sites,
-                                 out_path=cls_dir / "umap_patches_by_site_3d.html",
+                                 out_path=plot_dir / "umap_patches_by_site_3d.html",
                                  title=f"{label.capitalize()} Patch Embeddings 3D ({encoder})")
 
-    # 4-curve similarity distribution (shared between both subfolders)
-    within_t  = np.load(tumour_dir    / "cache_within_sims.npy")
-    cross_t   = np.load(tumour_dir    / "cache_cross_sims.npy")
-    within_nt = np.load(nontumour_dir / "cache_within_sims.npy")
-    cross_nt  = np.load(nontumour_dir / "cache_cross_sims.npy")
+    within_t  = np.load(cache_dir / "tumour_within_sims.npy")
+    cross_t   = np.load(cache_dir / "tumour_cross_sims.npy")
+    within_nt = np.load(cache_dir / "nontumour_within_sims.npy")
+    cross_nt  = np.load(cache_dir / "nontumour_cross_sims.npy")
 
     plot_similarity_distribution(
         within_t=within_t, cross_t=cross_t,
@@ -81,8 +80,8 @@ def _normalize(embeddings: np.ndarray) -> np.ndarray:
 
 
 def _umap_and_cache(embeddings: np.ndarray, sites: np.ndarray,
-                    out_dir: Path, umap_params: dict, label: str) -> None:
-    """Run 2D + 3D UMAP on a subsample, cache arrays, generate all three plots."""
+                    plot_dir: Path, cache_dir: Path, umap_params: dict, label: str) -> None:
+    """Run 2D + 3D UMAP on a subsample, cache to cache_dir, plot to plot_dir."""
     max_pts = int(umap_params.get("max_points", 50_000))
     n = len(embeddings)
 
@@ -108,19 +107,19 @@ def _umap_and_cache(embeddings: np.ndarray, sites: np.ndarray,
     print(f"[H2 exp02] Computing 3D UMAP on {label} patches...")
     coords_3d = compute_umap(umap_emb, n_components=3, **kwargs)
 
-    np.save(out_dir / "cache_umap_coords_2d.npy", coords_2d)
-    np.save(out_dir / "cache_umap_coords_3d.npy", coords_3d)
-    np.save(out_dir / "cache_umap_sites.npy",     umap_sites)
+    np.save(cache_dir / f"{label}_umap_coords_2d.npy", coords_2d)
+    np.save(cache_dir / f"{label}_umap_coords_3d.npy", coords_3d)
+    np.save(cache_dir / f"{label}_umap_sites.npy",     umap_sites)
 
-    encoder_name = out_dir.parent.name
+    encoder_name = plot_dir.parent.name
     plot_umap(coords_2d, labels=umap_sites,
-              out_path=out_dir / "umap_patches_by_site.png",
+              out_path=plot_dir / "umap_patches_by_site.png",
               title=f"{label.capitalize()} Patch Embeddings ({encoder_name})  —  2D UMAP by site")
     plot_umap_3d(coords_3d, labels=umap_sites,
-                 out_path=out_dir / "umap_patches_by_site_3d.png",
+                 out_path=plot_dir / "umap_patches_by_site_3d.png",
                  title=f"{label.capitalize()} Patch Embeddings 3D ({encoder_name})")
     plot_umap_3d_interactive(coords_3d, labels=umap_sites,
-                             out_path=out_dir / "umap_patches_by_site_3d.html",
+                             out_path=plot_dir / "umap_patches_by_site_3d.html",
                              title=f"{label.capitalize()} Patch Embeddings 3D ({encoder_name})")
 
 
@@ -144,30 +143,26 @@ def run(
     base_dir      = Path(cfg["outputs"]["dir"]) / encoder
     tumour_dir    = base_dir / "tumour"
     nontumour_dir = base_dir / "nontumour"
+    cache_dir     = base_dir / "cache"
     tumour_dir.mkdir(parents=True, exist_ok=True)
     nontumour_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
     # --plots-only: skip heavy computation, regenerate from cached arrays
     if plots_only:
         required = [
-            tumour_dir    / "cache_umap_coords_2d.npy",
-            tumour_dir    / "cache_umap_coords_3d.npy",
-            tumour_dir    / "cache_umap_sites.npy",
-            tumour_dir    / "cache_within_sims.npy",
-            tumour_dir    / "cache_cross_sims.npy",
-            nontumour_dir / "cache_umap_coords_2d.npy",
-            nontumour_dir / "cache_umap_coords_3d.npy",
-            nontumour_dir / "cache_umap_sites.npy",
-            nontumour_dir / "cache_within_sims.npy",
-            nontumour_dir / "cache_cross_sims.npy",
+            "tumour_umap_coords_2d.npy", "tumour_umap_coords_3d.npy", "tumour_umap_sites.npy",
+            "tumour_within_sims.npy",    "tumour_cross_sims.npy",
+            "nontumour_umap_coords_2d.npy", "nontumour_umap_coords_3d.npy", "nontumour_umap_sites.npy",
+            "nontumour_within_sims.npy", "nontumour_cross_sims.npy",
         ]
-        missing = [str(f) for f in required if not f.exists()]
+        missing = [f for f in required if not (cache_dir / f).exists()]
         if missing:
             raise FileNotFoundError(
-                f"Cache files missing:\n" + "\n".join(missing) +
+                f"Cache files missing in {cache_dir}:\n" + "\n".join(missing) +
                 "\nRun without --plots-only first to build the cache."
             )
-        _plots(tumour_dir, nontumour_dir, encoder)
+        _plots(tumour_dir, nontumour_dir, cache_dir, encoder)
         return
 
     if not geojson_dir.exists():
@@ -272,9 +267,9 @@ def run(
 
     # ----------------------------------------------------------------- UMAP
     _umap_and_cache(tumour_embeddings,    tumour_manifest["site"].values,
-                    tumour_dir, umap_params, label="tumour")
+                    tumour_dir, cache_dir, umap_params, label="tumour")
     _umap_and_cache(nontumour_embeddings, nontumour_manifest["site"].values,
-                    nontumour_dir, umap_params, label="nontumour")
+                    nontumour_dir, cache_dir, umap_params, label="nontumour")
 
     # ----------------------------------------- similarity pairs (for KDE plot)
     print(f"[H2 exp02] Computing tumour similarity pairs ({kde_sample}/site)...")
@@ -283,8 +278,8 @@ def run(
         site_labels=tumour_manifest["site"].values,
         n_sample_per_site=kde_sample,
     )
-    np.save(tumour_dir / "cache_within_sims.npy", within_t)
-    np.save(tumour_dir / "cache_cross_sims.npy",  cross_t)
+    np.save(cache_dir / "tumour_within_sims.npy", within_t)
+    np.save(cache_dir / "tumour_cross_sims.npy",  cross_t)
 
     print(f"[H2 exp02] Computing non-tumour similarity pairs ({kde_sample}/site)...")
     within_nt, cross_nt = compute_similarity_pairs(
@@ -292,8 +287,8 @@ def run(
         site_labels=nontumour_manifest["site"].values,
         n_sample_per_site=kde_sample,
     )
-    np.save(nontumour_dir / "cache_within_sims.npy", within_nt)
-    np.save(nontumour_dir / "cache_cross_sims.npy",  cross_nt)
+    np.save(cache_dir / "nontumour_within_sims.npy", within_nt)
+    np.save(cache_dir / "nontumour_cross_sims.npy",  cross_nt)
 
     print("[H2 exp02] Intermediate arrays cached.")
 
@@ -318,9 +313,15 @@ def run(
         "kde_sample_per_site":    kde_sample,
         "outputs": {
             "similarity_distribution.png": "4-curve KDE (tumour + non-tumour)",
-            "tumour": ["umap_patches_by_site.png", "umap_patches_by_site_3d.png", "umap_patches_by_site_3d.html"],
+            "tumour":    ["umap_patches_by_site.png", "umap_patches_by_site_3d.png", "umap_patches_by_site_3d.html"],
             "nontumour": ["umap_patches_by_site.png", "umap_patches_by_site_3d.png", "umap_patches_by_site_3d.html"],
         },
+        "cache": [
+            "cache/tumour_umap_coords_2d.npy",  "cache/tumour_umap_coords_3d.npy",  "cache/tumour_umap_sites.npy",
+            "cache/tumour_within_sims.npy",      "cache/tumour_cross_sims.npy",
+            "cache/nontumour_umap_coords_2d.npy","cache/nontumour_umap_coords_3d.npy","cache/nontumour_umap_sites.npy",
+            "cache/nontumour_within_sims.npy",   "cache/nontumour_cross_sims.npy",
+        ],
     }
     with open(base_dir / "summary.json", "w") as f:
         json.dump(summary, f, indent=2)
