@@ -1,0 +1,97 @@
+{
+  "experiment": "H1_exp03_hdbscan_clustering",
+  "encoder": "uni2h",
+  "patch_size": 2048,
+  "n_patches_total": 2076207,
+  "pca_components": 20,
+  "pca_variance_explained": 0.3349,
+  "site_cap": 120000,
+  "hdbscan_input_n": 480000,
+  "n_clusters": 10,
+  "n_noise_patches": 404953,
+  "min_cluster_size": 500,
+  "metrics": {
+    "ari": -0.0346,
+    "nmi": 0.0173,
+    "best_tumour_cluster": "cluster_02",
+    "best_tumour_cluster_purity_pct": 20.9,
+    "tumour_precision": 0.209,
+    "tumour_recall": 0.007,
+    "tumour_f1": 0.0136,
+    "per_cluster_purity": {
+      "noise": {
+        "n_total": 404953,
+        "n_tumour": 20841,
+        "tumour_pct": 5.15
+      },
+      "cluster_00": {
+        "n_total": 10816,
+        "n_tumour": 4,
+        "tumour_pct": 0.04
+      },
+      "cluster_01": {
+        "n_total": 12100,
+        "n_tumour": 0,
+        "tumour_pct": 0.0
+      },
+      "cluster_02": {
+        "n_total": 756,
+        "n_tumour": 158,
+        "tumour_pct": 20.9
+      },
+      "cluster_03": {
+        "n_total": 5862,
+        "n_tumour": 79,
+        "tumour_pct": 1.35
+      },
+      "cluster_04": {
+        "n_total": 1544,
+        "n_tumour": 312,
+        "tumour_pct": 20.21
+      },
+      "cluster_05": {
+        "n_total": 5734,
+        "n_tumour": 821,
+        "tumour_pct": 14.32
+      },
+      "cluster_06": {
+        "n_total": 1709,
+        "n_tumour": 213,
+        "tumour_pct": 12.46
+      },
+      "cluster_07": {
+        "n_total": 750,
+        "n_tumour": 26,
+        "tumour_pct": 3.47
+      },
+      "cluster_08": {
+        "n_total": 6828,
+        "n_tumour": 0,
+        "tumour_pct": 0.0
+      },
+      "cluster_09": {
+        "n_total": 28948,
+        "n_tumour": 10,
+        "tumour_pct": 0.03
+      }
+    }
+  },
+  "outputs": [
+    "umap_by_cluster.png",
+    "umap_by_cluster_3d.png",
+    "umap_by_cluster_3d.html",
+    "umap_by_groundtruth.png",
+    "umap_by_groundtruth_3d.png",
+    "umap_by_groundtruth_3d.html"
+  ],
+  "cache": [
+    "cache/hdbscan_pca.npy",
+    "cache/hdbscan_cluster_labels.npy",
+    "cache/hdbscan_gt_labels.npy",
+    "cache/hdbscan_sites.npy",
+    "cache/umap_coords_2d.npy",
+    "cache/umap_coords_3d.npy",
+    "cache/viz_cluster_labels.npy",
+    "cache/viz_gt_labels.npy"
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "experiment": "H1_exp03_hdbscan_clustering",
+  "encoder": "conch",
+  "patch_size": 1024,
+  "n_patches_total": 8212546,
+  "pca_components": 20,
+  "pca_variance_explained": 0.8528,
+  "site_cap": 120000,
+  "hdbscan_input_n": 480000,
+  "n_clusters": 3,
+  "n_noise_patches": 309607,
+  "min_cluster_size": 500,
+  "metrics": {
+    "ari": -0.0133,
+    "nmi": 0.0038,
+    "best_tumour_cluster": "cluster_01",
+    "best_tumour_cluster_purity_pct": 3.57,
+    "tumour_precision": 0.0357,
+    "tumour_recall": 0.252,
+    "tumour_f1": 0.0625,
+    "per_cluster_purity": {
+      "noise": {
+        "n_total": 309607,
+        "n_tumour": 16926,
+        "tumour_pct": 5.47
+      },
+      "cluster_00": {
+        "n_total": 6297,
+        "n_tumour": 0,
+        "tumour_pct": 0.0
+      },
+      "cluster_01": {
+        "n_total": 160258,
+        "n_tumour": 5714,
+        "tumour_pct": 3.57
+      },
+      "cluster_02": {
+        "n_total": 3838,
+        "n_tumour": 32,
+        "tumour_pct": 0.83
+      }
+    }
+  },
+  "outputs": [
+    "umap_by_cluster.png",
+    "umap_by_cluster_3d.png",
+    "umap_by_cluster_3d.html",
+    "umap_by_groundtruth.png",
+    "umap_by_groundtruth_3d.png",
+    "umap_by_groundtruth_3d.html"
+  ],
+  "cache": [
+    "cache/hdbscan_pca.npy",
+    "cache/hdbscan_cluster_labels.npy",
+    "cache/hdbscan_gt_labels.npy",
+    "cache/hdbscan_sites.npy",
+    "cache/umap_coords_2d.npy",
+    "cache/umap_coords_3d.npy",
+    "cache/viz_cluster_labels.npy",
+    "cache/viz_gt_labels.npy"
+  ]
+}
