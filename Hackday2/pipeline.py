@@ -473,6 +473,8 @@ if __name__ == "__main__":
 
     # resolve data_root + slide_id into concrete paths
     data_root = Path(cfg["data_root"])
+    if not data_root.is_absolute():
+        data_root = _REPO_ROOT / data_root
     slide_id  = cfg["slide_id"]
 
     wsi_path = (

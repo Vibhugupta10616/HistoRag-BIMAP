@@ -6,9 +6,9 @@
 
 # ── paths ────────────────────────────────────────────────────────────────────
 
-data_root: "D:/hackday2_data"                # root of your downloaded Drive folder
+data_root: "Weights and WSIs"                # folder inside the repo root (relative path)
 
-slide_id: "PrimaryTumor_HE_034"             # which slide to run — change this to switch WSIs
+slide_id: "PrimaryTumor_HE_010"             # which slide to run — change this to switch WSIs
 
 # derived paths (no need to change these)
 wsi_path: null          # set via CLI: --wsi or auto-derived below if null
