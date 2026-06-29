@@ -494,7 +494,7 @@ if __name__ == "__main__":
         cfg["conch"]["checkpoint"] = str(data_root / "conch" / "pytorch_model.bin")
 
     # if pre-computed embeddings exist in Drive download location, copy to cache
-    drive_emb = data_root / "embeddings" / slide_id / "cache" / "embeddings.h5"
+    drive_emb = data_root / "embeddings" / f"{slide_id}.h5"
     cache_emb = Path(cfg["outputs_dir"]) / slide_id / "cache" / "embeddings.h5"
     if drive_emb.exists() and not cache_emb.exists():
         cache_emb.parent.mkdir(parents=True, exist_ok=True)

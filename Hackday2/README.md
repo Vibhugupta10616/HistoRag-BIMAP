@@ -43,21 +43,29 @@ pip install -r requirements.txt
 ```
 Google Drive/
 ├── conch/
-│   └── pytorch_model.bin          ← CONCH model weights (766 MB) — needed for full pipeline only
+│   └── pytorch_model.bin              (766 MB)  — Option B only
 ├── wsi/
-│   └── PrimaryTumor_HE_034.svs    ← raw WSI files — needed for full pipeline only
+│   ├── PrimaryTumor_HE_010.svs                  — Option B only
 │   └── PrimaryTumor_HE_XXX.svs
 ├── annotations/
-│   └── PrimaryTumor_HE_034.geojson  ← tumour annotations — needed for ground-truth plot
-│   └── ...
+│   ├── PrimaryTumor_HE_010.geojson              — both options (ground-truth plot)
+│   └── PrimaryTumor_HE_XXX.geojson
 └── embeddings/
-    └── PrimaryTumor_HE_034.h5       ← pre-computed CONCH embeddings — needed for fast option only    
+    ├── PrimaryTumor_HE_010.h5                   — Option A only
     └── PrimaryTumor_HE_XXX.h5
-
 ```
 
-
-Download the folder to a single location on your machine, e.g. `D:/hackday2_data/`.
+Download the entire folder into the **repo root** and keep the name `Weights and WSIs`:
+```
+HistoRag-BIMAP/
+├── Weights and WSIs/     ← downloaded Drive folder goes here
+│   ├── conch/
+│   ├── wsi/
+│   ├── annotations/
+│   └── embeddings/
+├── Hackday2/
+└── ...
+```
 You do not need to download everything — see Step 5 for what each option requires.
 
 ---
@@ -67,8 +75,8 @@ You do not need to download everything — see Step 5 for what each option requi
 Open `Hackday2/config.yaml` and set **only these two lines**:
 
 ```yaml
-data_root: "D:/hackday2_data"        # folder you downloaded from Drive
-slide_id:  "PrimaryTumor_HE_034"     # which slide to run — change to switch WSIs
+data_root: "Weights and WSIs"        # Drive folder downloaded into repo root — do not rename
+slide_id:  "PrimaryTumor_HE_010"     # which slide to run — change to switch WSIs
 ```
 
 All other paths (WSI, annotations, CONCH weights, embeddings) are resolved automatically from these two values.
