@@ -109,7 +109,7 @@ HistoRag-BIMAP/
 |---|---|---|---|
 | CLIP ViT-B/16 | General (natural images) | 512 | Open weights via `open_clip` |
 | CONCH | Histopathology vision-language | 512 | MahmoodLab |
-| UNI2-h | Histopathology vision-only SSL | 1536 | MahmoodLab; requires HuggingFace access |
+| UNI2-h | Histopathology vision-only SSL | 1024 | MahmoodLab; requires HuggingFace access |
 
 All encoders are used **frozen** — no model training required.
 

@@ -97,6 +97,50 @@ This matches the `exp01 fail, exp02 pass` pattern = *tumour signal present but b
 
 ---
 
+## Exp03 — HDBSCAN Results
+
+**Setup:** 20-component IncrementalPCA → HDBSCAN (min\_cluster\_size=500) on 480K patches
+(120K per site cap). ARI/NMI measure alignment with tumour ground truth.
+
+| Encoder | PCA variance | Clusters found | Noise % | Best cluster purity | Precision | Recall | F1 | ARI | Verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| CONCH | 85.3% (20 dims) | 3 | 64.5% | 3.57% (< 5% baseline) | 0.036 | 0.252 | 0.063 | -0.013 | ❌ fail |
+| UNI | 33.5% (20 dims) | 10 | 84.4% | 20.9% (4.2× baseline) | 0.209 | 0.007 | 0.014 | -0.035 | ⚠️ tiny |
+
+### Per-cluster breakdown — UNI (notable clusters only)
+
+| Cluster | Patches | Tumour % | vs baseline |
+|---|---|---|---|
+| cluster_02 | 756 | 20.9% | 4.2× |
+| cluster_04 | 1,544 | 20.2% | 4.0× |
+| cluster_05 | 5,734 | 14.3% | 2.9× |
+| cluster_06 | 1,709 | 12.5% | 2.5× |
+| noise | 404,953 | 5.2% | ≈ baseline |
+
+### Conclusion (exp03)
+
+HDBSCAN with 20 PCA components performs **worse than K-means** for both encoders:
+
+- **CONCH**: 85.3% variance captured by 20 PCA dims, yet HDBSCAN finds only 3 blobs
+  and the best cluster purity (3.57%) is **below the 5% baseline** — no tumour structure found.
+- **UNI**: only 33.5% variance in 20 PCA dims — HDBSCAN is working in a severely
+  compressed space that discards most of UNI's information. Of 480K input patches,
+  84.4% are labelled noise. Four tiny clusters achieve 12–21% tumour purity but together
+  capture <1% of tumour patches (recall = 0.007). Near-zero ARI (-0.035) confirms no
+  global alignment with tumour labels.
+
+Two reasons HDBSCAN struggles here:
+1. Tumour patches are **not geometrically dense** in PCA space — they are a diffuse,
+   buried minority signal, not a compact manifold that HDBSCAN can isolate.
+2. The density threshold causes almost all tumour patches to be absorbed into the noise
+   class or into large non-tumour blobs.
+
+**Exp03 confirms**: K-means (exp02, k=8) extracts more usable tumour signal than HDBSCAN
+for this dataset. The natural cluster structure found by HDBSCAN reflects morphological
+outliers and stain-type groups, not tumour biology.
+
+---
+
 ## XAI — Dimension Importance
 
 Implemented in `histoRAG/classify.py → explain_dimensions`.
