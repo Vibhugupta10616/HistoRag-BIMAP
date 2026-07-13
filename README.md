@@ -2,71 +2,79 @@
 
 **FAU BIMAP SS2026 · Individual project · Vibhu Gupta**
 
-This project investigates whether patch-level and slide-level image embeddings from
-whole slide images (WSIs) can support clinically meaningful analyses: finding similar
-patients, classifying tumour tissue, and understanding how patients relate to each other
-at the cancer-patch level.
+This project investigates whether patch-level image embeddings from whole slide images
+(WSIs), produced by **frozen** encoders, carry clinically meaningful structure: whether
+tumour tissue groups on its own without labels, and how patients relate to each other at
+the cancer-patch level. The goal is to justify — with evidence — the design of a
+patient-level retrieval system built on patch-level tumour biology.
 
 The dataset is [HANCOCK](https://hancock.research.fau.eu/) — a multimodal head and neck
 cancer dataset with 763 patients, 701 primary tumour WSIs, and sparse QuPath tumour
 polygon annotations (Dörrich et al., *Nature Communications* 2025).
 
+No model training is involved anywhere. All three encoders (CLIP, CONCH, UNI) are used
+frozen; every experiment is unsupervised clustering / similarity analysis, with the
+`.geojson` tumour annotations used **only at evaluation time**.
+
+---
+
+## What's here
+
+| Component | What it does |
+|---|---|
+| **H1** — `hypotheses/H1_tumour_classification/` | Does tumour tissue cluster on its own? K-means (k=2, k=8), HDBSCAN, + XAI dimension importance |
+| **H2** — `hypotheses/H2_patient_correlation/` | How do patients relate? Site clustering (Q1) + cross-site tumour similarity (Q2) |
+| **Hackday2** — `Hackday2/` | Self-contained single-WSI demo: patch → CONCH → HDBSCAN → 2 UMAP plots |
+| **`histoRAG/`** | Shared library used by all experiments |
+| **`Summary.md`** | Cross-experiment interpretation + the retrieval design the results justify |
+
+The headline conclusion (see `Summary.md`): tumour is **not** the dominant axis of
+variation in any encoder, but tumour signal is present and buried, and **tumour patches
+are broadly site-agnostic** — which is the signal a patient-level RAG should be built on.
+
 ---
 
 ## Quickstart
 
+The fastest way to see the pipeline end to end is the Hackday2 single-WSI demo — it has
+its own step-by-step guide including the Google Drive data link:
+
+➡️ **[Hackday2/README.md](Hackday2/README.md)**
+
 ```bash
-# 1. Activate virtualenv (Python 3.12)
-bimap\Scripts\activate          # Windows
-# source bimap/bin/activate     # Unix
-
-# 2. Install dependencies
+# Python 3.12 venv
+python -m venv .bimap
+.bimap\Scripts\activate          # Windows
+# source .bimap/bin/activate     # Unix
 pip install -r requirements.txt
-
-# 3. Verify
-python -c "import histoRAG; print(histoRAG.__version__)"
-
-# 4. Run Phase 0 MVP (patch-level retrieval baseline)
-python MVP/pipeline.py --config MVP/configs/phase0_mvp.yaml --seed 42
 ```
 
----
-
-## Phase roadmap
-
-| Phase | Goal | Status |
-|---|---|---|
-| **0 — MVP** | End-to-end patch retrieval pipeline (CLIP + FAISS) | **Complete** |
-| **1 — H1** | Tumour vs Other classification on patch embeddings + XAI | **Complete** |
-| **1 — H2** | Patient correlation maps: site clustering + cancer similarity | **Complete** |
-| 2 — Extensions | Spatial arrangement (ABMIL/graph), index ablations | Planned |
-| 3 — Consolidation | Reproducibility, figures, report | Planned |
+To reproduce the full H1 / H2 results you need the pre-computed HANCOCK patch embeddings
+(per-site `.h5` files) and the `.geojson` annotations — see **Data** below and each
+hypothesis README.
 
 ---
 
-## Phase 0 results (MVP baseline)
+## Results at a glance
 
-**Dataset:** 2 HANCOCK TMA blocks · 3,044 patches · 2 tissue classes  
-**Encoder:** CLIP ViT-B/16 (frozen) · **Index:** FAISS flat cosine
+Full tables, per-tissue breakdowns, and interpretation live in each hypothesis README.
 
-| Metric | Mean ± SD (3 seeds) |
-|---|---|
-| top-1 accuracy | 0.892 ± 0.011 |
-| top-5 accuracy | 0.994 ± 0.002 |
-| mAP@10 | 0.894 ± 0.004 |
+**H1 — buried tumour signal** (best precision at k=8, ~5% tumour baseline):
 
-Full results and per-run interpretation in `EXPERIMENT_LOG.md`.
+| Encoder | Precision | vs baseline | Verdict |
+|---|---|---|---|
+| CLIP | 0.090 | 1.75× | weak |
+| CONCH | 0.127 | 2.5× | present |
+| **UNI** | **0.154** | **3.1×** | **best** |
 
----
+Tumour is never the dominant split (k=2 fails for all encoders). Ranking: **UNI > CONCH >> CLIP**.
 
-## Phase 1 hypotheses
+**H2 — cancer tissue is site-agnostic:** within-site vs cross-site tumour-patch
+similarity gap is only **+0.017** (both CONCH and UNI) — tumour patches from all four
+anatomical sites overlap heavily in embedding space.
 
-See each hypothesis README for full definition, experiments, results, and run instructions.
-
-| Hypothesis | Folder | README |
-|---|---|---|
-| H1 — Unsupervised tumour grouping | `hypotheses/H1_tumour_classification/` | [H1 README](hypotheses/H1_tumour_classification/README.md) |
-| H2 — Patient correlation maps | `hypotheses/H2_patient_correlation/` | [H2 README](hypotheses/H2_patient_correlation/README.md) |
+See [H1 README](hypotheses/H1_tumour_classification/README.md) ·
+[H2 README](hypotheses/H2_patient_correlation/README.md).
 
 ---
 
@@ -74,32 +82,29 @@ See each hypothesis README for full definition, experiments, results, and run in
 
 ```
 HistoRag-BIMAP/
-├── pipeline.py                  # Phase 0/1 retrieval pipeline (tile→embed→index→eval→log)
-├── requirements.txt
-├── histoRAG/
-│   ├── tile.py                  # WSI loading + Otsu patch extraction
-│   ├── embed.py                 # encoders (CLIP/CONCH/UNI2-h) + FAISS index
-│   ├── retrieve.py              # retrieval splits + top-k accuracy + mAP
-│   ├── log.py                   # config loading, seeding, experiment CSV logging
-│   ├── labels.py                # tumour labels (geojson) + site labels (clinical CSV)
-│   ├── correlate.py             # UMAP, similarity distribution, interactive 3D UMAP
-│   ├── classify.py              # H1 classifier stub + real classification metrics
-│   └── viz/                     # Streamlit retrieval demo
+├── histoRAG/                    # shared library
+│   ├── loader.py               # streaming .h5 embedding loader (iter_encoder), patch-size detection
+│   ├── labels.py               # tumour labels (.geojson) + site labels (clinical CSV)
+│   ├── classify.py             # k-means / minibatch k-means, cluster→label matching, metrics, XAI
+│   └── correlate.py            # UMAP (2D/3D), similarity distributions, heatmaps
 ├── hypotheses/
 │   ├── H1_tumour_classification/
-│   │   ├── exp01_kmeans_k2/             # k=2 dominant-axis test
-│   │   └── exp02_overcluster_assign/    # k=8 buried-signal test
+│   │   ├── exp01_kmeans_k2/            # is tumour the dominant axis?
+│   │   ├── exp02_overcluster_assign/   # k=8 — is tumour signal present at all?
+│   │   ├── exp03_hdbscan_clustering/    # natural density structure
+│   │   ├── run_h1_exp12_hpc.sh          # HPC: exp01+exp02, all encoders
+│   │   └── visualize_kmeans_umap.py
 │   └── H2_patient_correlation/
-│       ├── exp01_site_clustering/       # H2 Q1: config.yaml + run.py + outputs/
-│       └── exp02_tumour_similarity/     # H2 Q2: config.yaml + run.py + outputs/
-├── configs/
-│   ├── phase0_mvp.yaml          # Phase 0 retrieval config
-│   ├── phase1_*.yaml            # Phase 1 slide-level retrieval configs (3 encoders)
-│   └── runs/                    # auto-generated immutable per-run config snapshots
-├── experiments/
-│   └── experiments.csv          # all retrieval pipeline runs
-└── data/                        # gitignored — WSIs, patches, indexes, embeddings
+│       ├── exp01_site_clustering/       # Q1: patient vectors cluster by site?
+│       └── exp02_tumour_similarity/     # Q2: cross-site tumour similarity (+ HPC script)
+├── Hackday2/                    # single-WSI HDBSCAN demo (self-contained)
+├── Summary.md                  # cross-experiment interpretation + retrieval design
+├── requirements.txt            # local
+└── requirements_hpc.txt        # TinyGPU / HPC
 ```
+
+Each experiment folder is self-contained: `config.yaml` + `run.py` + `outputs/`.
+WSIs, patches, embeddings, and index artifacts are gitignored.
 
 ---
 
@@ -109,24 +114,27 @@ HistoRag-BIMAP/
 |---|---|---|---|
 | CLIP ViT-B/16 | General (natural images) | 512 | Open weights via `open_clip` |
 | CONCH | Histopathology vision-language | 512 | MahmoodLab |
-| UNI2-h | Histopathology vision-only SSL | 1024 | MahmoodLab; requires HuggingFace access |
+| UNI (UNI2-h) | Histopathology vision-only SSL | 1024 | MahmoodLab; requires HuggingFace access |
 
-All encoders are used **frozen** — no model training required.
+All encoders are used **frozen** — no training.
 
 ---
 
-## Providing embeddings (H1 / H2)
+## Data
 
-Place pre-computed embedding `.npy` files at:
-```
-data/embeddings/<encoder-name>/patch_embeddings.npy
-```
-Shape: `(N_patches, dim)`, `float32`, **row-aligned to** `data/patches/manifest.parquet`.
-Then update `inputs.embeddings_path` in the relevant experiment `config.yaml`.
+Experiments consume pre-computed per-site patch embeddings and QuPath annotations:
+
+| Input | Layout | Source |
+|---|---|---|
+| Patch embeddings | `.h5` per anatomical site, per encoder | HANCOCK download (CLIP / CONCH / UNI) |
+| Tumour annotations | `.geojson` per slide | HANCOCK `WSI_PrimaryTumor_Annotations` |
+
+Point each experiment's `config.yaml` at your embeddings root. The Hackday2 demo bundles
+its own Drive folder with a single WSI, CONCH weights, and one `.h5` — see its README.
 
 ---
 
 ## Required reading
 
 - HANCOCK paper: Dörrich et al., *Nat Commun* 16, 7163 (2025) — [PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC12322140/)
-- CLAM (Mahmood Lab) — attention MIL for WSI classification; used in HANCOCK paper for tumour localization
+- CLAM (Mahmood Lab) — attention MIL for WSI classification; used in HANCOCK for tumour localization

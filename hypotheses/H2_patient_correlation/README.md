@@ -206,8 +206,8 @@ python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py --encode
 python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py --encoder conch --plots-only
 python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py --encoder uni2h --plots-only
 
-# HPC (both encoders)
-sbatch hypotheses/H2_patient_correlation/run_h2_hpc.sh
+# HPC (exp02, both encoders)
+sbatch hypotheses/H2_patient_correlation/exp02_tumour_similarity/run_h2_exp02_hpc.sh
 ```
 
 ---

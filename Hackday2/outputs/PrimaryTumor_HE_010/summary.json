@@ -1,0 +1,10 @@
+{
+  "slide_id": "PrimaryTumor_HE_010",
+  "n_patches": 5244,
+  "embedding_dim": 512,
+  "pca_components": 20,
+  "n_clusters": 3,
+  "n_noise_patches": 3167,
+  "umap_n_viz": 5244,
+  "metrics": null
+}

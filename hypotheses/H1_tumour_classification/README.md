@@ -240,7 +240,7 @@ python hypotheses/H1_tumour_classification/exp02_overcluster_assign/run.py --enc
 python hypotheses/H1_tumour_classification/exp02_overcluster_assign/run.py --encoder conch --plots-only
 
 # HPC — all encoders, exp01 + exp02 in one job
-sbatch hypotheses/H1_tumour_classification/run_h1_hpc.sh
+sbatch hypotheses/H1_tumour_classification/run_h1_exp12_hpc.sh
 
 # exp03 — HDBSCAN (same three modes)
 python hypotheses/H1_tumour_classification/exp03_hdbscan_clustering/run.py --encoder conch

@@ -12,12 +12,21 @@ Provides:
   - cluster_summary:           per-cluster GeoJSON tumour percentage + assigned label
   - grouped_metrics:           per-site or per-WSI post-hoc evaluation
   - explain_dimensions:        STUB — XAI strategy deferred until clustering results available
+  - tune_threshold:            H3 — pick a decision threshold on validation scores
+  - probe_metrics:             H3 — AUROC/PR-AUC + thresholded metrics for a supervised probe
 """
 
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans, MiniBatchKMeans
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from sklearn.metrics import (
+    accuracy_score,
+    average_precision_score,
+    balanced_accuracy_score,
+    confusion_matrix,
+    precision_recall_fscore_support,
+    roc_auc_score,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -219,6 +228,103 @@ def grouped_metrics(
 
 
 # ---------------------------------------------------------------------------
+# H3 — supervised linear probe metrics
+# ---------------------------------------------------------------------------
+
+def tune_threshold(y_true: np.ndarray, y_score: np.ndarray, objective: str = "f1") -> float:
+    """
+    Pick a decision threshold on (held-out) validation scores.
+
+    Candidate thresholds are the unique predicted scores themselves — this is
+    exact and cheap enough for validation-set sizes (tens of thousands to a
+    few million patches).
+
+    Args:
+        y_true:    (N,) int ground-truth labels — 1 = tumour, 0 = other.
+        y_score:   (N,) float predicted tumour probability.
+        objective: "f1" (maximise F1) or "youden" (maximise TPR - FPR).
+
+    Returns:
+        The threshold (float) that maximises the chosen objective.
+    """
+    y_true = np.asarray(y_true, dtype=np.int32)
+    y_score = np.asarray(y_score, dtype=np.float64)
+
+    candidates = np.unique(y_score)
+    if len(candidates) > 2000:
+        # Coarsen to 2000 quantile cut points — plenty of resolution, keeps the
+        # sweep fast on multi-million-patch validation sets.
+        candidates = np.quantile(candidates, np.linspace(0, 1, 2000))
+
+    best_thr, best_score = 0.5, -1.0
+    n_pos = int(y_true.sum())
+    n_neg = len(y_true) - n_pos
+    for thr in candidates:
+        y_pred = (y_score >= thr).astype(np.int32)
+        if objective == "youden":
+            tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+            tpr = tp / n_pos if n_pos else 0.0
+            fpr = fp / n_neg if n_neg else 0.0
+            score = tpr - fpr
+        else:  # f1
+            _, _, f1, _ = precision_recall_fscore_support(
+                y_true, y_pred, labels=[1], average="binary", zero_division=0
+            )
+            score = f1
+        if score > best_score:
+            best_score, best_thr = score, float(thr)
+
+    return best_thr
+
+
+def probe_metrics(y_true: np.ndarray, y_score: np.ndarray, threshold: float) -> dict:
+    """
+    Evaluate a supervised linear probe's predicted tumour probabilities.
+
+    Reports both threshold-independent ranking quality (AUROC, PR-AUC — the
+    honest "does the probe separate the classes at all" numbers, unaffected by
+    class imbalance) and metrics at the given decision threshold.
+
+    Args:
+        y_true:    (N,) int ground-truth labels — 1 = tumour, 0 = other.
+        y_score:   (N,) float predicted tumour probability.
+        threshold: decision threshold to binarise y_score at.
+
+    Returns:
+        dict with auroc, pr_auc, threshold, accuracy, balanced_accuracy,
+        precision, recall, f1, tumour_prevalence, confusion_matrix
+        ({tn, fp, fn, tp}).
+    """
+    y_true = np.asarray(y_true, dtype=np.int32)
+    y_score = np.asarray(y_score, dtype=np.float64)
+
+    if len(y_true) == 0 or len(np.unique(y_true)) < 2:
+        auroc, pr_auc = float("nan"), float("nan")
+    else:
+        auroc = float(roc_auc_score(y_true, y_score))
+        pr_auc = float(average_precision_score(y_true, y_score))
+
+    y_pred = (y_score >= threshold).astype(np.int32)
+    base = classification_metrics(y_true, y_pred)
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+
+    return {
+        "auroc": auroc,
+        "pr_auc": pr_auc,
+        "threshold": float(threshold),
+        "accuracy": base["accuracy"],
+        "balanced_accuracy": float(balanced_accuracy_score(y_true, y_pred)),
+        "precision": base["precision"],
+        "recall": base["recall"],
+        "f1": base["f1"],
+        "tumour_prevalence": base["tumour_prevalence"],
+        "confusion_matrix": {
+            "tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp),
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
 # XAI — STUB (deferred until clustering results are available)
 # ---------------------------------------------------------------------------
 
@@ -281,3 +387,29 @@ def explain_dimensions(
         "n_tumour":        int(n_t),
         "n_other":         int(n_o),
     }
+
+
+if __name__ == "__main__":
+    # Self-check for the H3 helpers: on perfectly separable synthetic scores,
+    # tune_threshold must find a threshold that splits the classes cleanly,
+    # and probe_metrics must report AUROC and F1 at (essentially) 1.0.
+    rng = np.random.default_rng(0)
+    n = 2000
+    y_true = np.concatenate([np.zeros(n, dtype=int), np.ones(n, dtype=int)])
+    y_score = np.concatenate([
+        rng.uniform(0.0, 0.4, n),   # "other" scores low
+        rng.uniform(0.6, 1.0, n),   # "tumour" scores high
+    ])
+
+    thr = tune_threshold(y_true, y_score, objective="f1")
+    assert 0.35 <= thr <= 0.65, f"expected threshold in the separation gap, got {thr}"
+
+    m = probe_metrics(y_true, y_score, thr)
+    assert m["auroc"] > 0.999, f"expected AUROC~1.0 on separable data, got {m['auroc']}"
+    assert m["f1"] > 0.999, f"expected F1~1.0 at tuned threshold, got {m['f1']}"
+    # Threshold candidates come from a quantile grid, not the (empty) separation
+    # gap itself, so a handful of near-boundary misses is expected, not a bug.
+    n_errors = m["confusion_matrix"]["fp"] + m["confusion_matrix"]["fn"]
+    assert n_errors < 5, f"expected near-zero errors on separable data, got {n_errors}"
+
+    print("classify.py self-check passed:", {k: m[k] for k in ("auroc", "pr_auc", "f1", "threshold")})

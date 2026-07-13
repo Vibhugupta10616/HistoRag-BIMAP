@@ -142,6 +142,7 @@ Saved to `Hackday2/outputs/<slide_id>/`:
 umap_by_cluster.png        <- UMAP coloured by HDBSCAN cluster label
 umap_by_groundtruth.png    <- UMAP coloured by tumour / other (requires annotations)
 summary.json               <- patch count, cluster count, params used
+results.md                 <- human-readable run summary + metrics (if annotations given)
 cache/
     embeddings.h5
     umap_2d.npy

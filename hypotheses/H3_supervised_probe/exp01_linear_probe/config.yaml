@@ -1,0 +1,43 @@
+experiment:
+  name: H3_exp01_linear_probe
+  hypothesis: H3
+  description: >
+    Supervised logistic-regression linear probe on frozen patch embeddings.
+    H1's unsupervised clustering (K-means, HDBSCAN) failed to separate tumour
+    from non-tumour (best F1 0.26). This tests whether a small amount of
+    supervision on the same frozen embeddings does what clustering could not.
+    Split is patient-level (by case, not by patch) to avoid leakage.
+
+# Encoder whose embeddings to use. One of: clip-vitb16 | conch | uni2h
+encoder: uni2h
+
+inputs:
+  # Root directory containing all unzipped encoder folders (CLIP/, CONCH/, UNI/).
+  embeddings_root: E:/embeddings
+
+  # Directory containing one <slide_id>.geojson per slide (QuPath tumour annotations).
+  geojson_dir: D:/College/Sem_5/HistoRag-BIMAP/WSI_PrimaryTumor_Annotations
+
+  # Optional: restrict to specific canonical sites for a fast smoke test
+  # (e.g. ["larynx"]). Leave null / omit for the full dataset.
+  sites: null
+
+split:
+  val_frac: 0.15
+  test_frac: 0.15
+  random_state: 42
+
+params:
+  C: 1.0
+  max_iter: 1000
+  class_weight: balanced
+  max_train_neg: 1_000_000       # cap on training negatives (bounds RAM)
+  max_val_patches: 300_000       # cap on validation set (bounds threshold-tuning cost)
+  assumed_tumour_prevalence: 0.05  # from H1 findings — used only to size the train negative subsample rate
+  threshold_objective: f1        # f1 | youden
+  # patch_size: auto-detected from h5 coordinate step patterns.
+  # Confirmed values: CLIP/CONCH = 1024, UNI = 2048.
+  patch_size: null
+
+outputs:
+  dir: hypotheses/H3_supervised_probe/exp01_linear_probe/outputs/
