@@ -12,9 +12,10 @@ The dataset is [HANCOCK](https://hancock.research.fau.eu/) — a multimodal head
 cancer dataset with 763 patients, 701 primary tumour WSIs, and sparse QuPath tumour
 polygon annotations (Dörrich et al., *Nature Communications* 2025).
 
-No model training is involved anywhere. All three encoders (CLIP, CONCH, UNI) are used
-frozen; every experiment is unsupervised clustering / similarity analysis, with the
-`.geojson` tumour annotations used **only at evaluation time**.
+No encoder training is involved anywhere. All three encoders (CLIP, CONCH, UNI) are used
+frozen; H1/H2 are unsupervised clustering / similarity analysis with `.geojson` tumour
+annotations used only at evaluation time, while H3 fits a linear probe (logistic
+regression) on top of the same frozen embeddings.
 
 ---
 
@@ -24,6 +25,7 @@ frozen; every experiment is unsupervised clustering / similarity analysis, with 
 |---|---|
 | **H1** — `hypotheses/H1_tumour_classification/` | Does tumour tissue cluster on its own? K-means (k=2, k=8), HDBSCAN, + XAI dimension importance |
 | **H2** — `hypotheses/H2_patient_correlation/` | How do patients relate? Site clustering (Q1) + cross-site tumour similarity (Q2) |
+| **H3** — `hypotheses/H3_supervised_probe/` | Is tumour linearly separable with supervision? Logistic regression probe on frozen embeddings |
 | **Hackday2** — `Hackday2/` | Self-contained single-WSI demo: patch → CONCH → HDBSCAN → 2 UMAP plots |
 | **`histoRAG/`** | Shared library used by all experiments |
 | **`Summary.md`** | Cross-experiment interpretation + the retrieval design the results justify |
@@ -49,9 +51,9 @@ python -m venv .bimap
 pip install -r requirements.txt
 ```
 
-To reproduce the full H1 / H2 results you need the pre-computed HANCOCK patch embeddings
-(per-site `.h5` files) and the `.geojson` annotations — see **Data** below and each
-hypothesis README.
+To reproduce the full H1 / H2 / H3 results you need the pre-computed HANCOCK patch
+embeddings (per-site `.h5` files) and the `.geojson` annotations — see **Data** below and
+each hypothesis README.
 
 ---
 
@@ -73,8 +75,13 @@ Tumour is never the dominant split (k=2 fails for all encoders). Ranking: **UNI 
 similarity gap is only **+0.017** (both CONCH and UNI) — tumour patches from all four
 anatomical sites overlap heavily in embedding space.
 
+**H3 — tumour is linearly separable with supervision:** a logistic regression probe on
+frozen UNI2-h embeddings gets **test AUROC 0.88** — a night-and-day jump over H1's best
+unsupervised F1 of 0.26, confirming the tumour signal is real but buried, not absent.
+
 See [H1 README](hypotheses/H1_tumour_classification/README.md) ·
-[H2 README](hypotheses/H2_patient_correlation/README.md).
+[H2 README](hypotheses/H2_patient_correlation/README.md) ·
+[H3 README](hypotheses/H3_supervised_probe/README.md).
 
 ---
 
@@ -94,9 +101,11 @@ HistoRag-BIMAP/
 │   │   ├── exp03_hdbscan_clustering/    # natural density structure
 │   │   ├── run_h1_exp12_hpc.sh          # HPC: exp01+exp02, all encoders
 │   │   └── visualize_kmeans_umap.py
-│   └── H2_patient_correlation/
-│       ├── exp01_site_clustering/       # Q1: patient vectors cluster by site?
-│       └── exp02_tumour_similarity/     # Q2: cross-site tumour similarity (+ HPC script)
+│   ├── H2_patient_correlation/
+│   │   ├── exp01_site_clustering/       # Q1: patient vectors cluster by site?
+│   │   └── exp02_tumour_similarity/     # Q2: cross-site tumour similarity (+ HPC script)
+│   └── H3_supervised_probe/
+│       └── exp01_linear_probe/          # logistic regression on frozen embeddings
 ├── Hackday2/                    # single-WSI HDBSCAN demo (self-contained)
 ├── Summary.md                  # cross-experiment interpretation + retrieval design
 ├── requirements.txt            # local

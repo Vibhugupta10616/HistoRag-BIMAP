@@ -1,5 +1,6 @@
 # H2 — Patient Correlation on a Patch Level
 
+
 ## Hypothesis
 
 How do patients relate to each other based on their patch-level embeddings?
@@ -31,6 +32,38 @@ comparing within-site vs cross-site patch pairs.
 overlap — cancer tissue shares common histopathological patterns regardless of
 anatomical site.
 
+---
+
+## Config
+
+Each experiment reads `config.yaml` in its own folder — set `inputs.embeddings_root`
+(and `inputs.geojson_dir` for exp02) to point at your local paths, or override per-run
+with `--embeddings-root` / `--geojson-dir`.
+
+
+## Running
+
+```bash
+# exp01 — one mode only, no cache/subsample flags: streams all slides, mean-pools per
+# patient (708 vectors total — cheap regardless), always a "full" run.
+python hypotheses/H2_patient_correlation/exp01_site_clustering/run.py --encoder conch
+python hypotheses/H2_patient_correlation/exp01_site_clustering/run.py --encoder uni2h
+
+# exp02 — full run, tumour patches (all of them) + non-tumour patches CAPPED at
+# 250k/site for local RAM safety (~1M total, not the full ~95% of the dataset).
+python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py --encoder conch
+python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py --encoder uni2h
+
+# exp02 --full — collect ALL non-tumour patches, no cap (HPC only; ~16GB CONCH / ~32GB UNI RAM)
+python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py --encoder conch --full
+
+# exp02 --plots-only — replot from cached arrays, skips the ~20 min embedding scan entirely
+python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py --encoder conch --plots-only
+python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py --encoder uni2h --plots-only
+
+# HPC (exp02, both encoders, runs with --full)
+sbatch hypotheses/H2_patient_correlation/exp02_tumour_similarity/run_h2_exp02_hpc.sh
+```
 ---
 
 ## Exp01 — Site Clustering Results (Q1)
@@ -189,26 +222,6 @@ site signal — cancer tissue is not completely site-agnostic, but site accounts
 a tiny fraction of the total similarity variance. For HistoRAG tumour-specific retrieval,
 both encoders will surface similar cancer patients across sites, making them viable for
 cross-site patient matching.
-
----
-
-## Running
-
-```bash
-# Local (streaming, low RAM)
-python hypotheses/H2_patient_correlation/exp01_site_clustering/run.py
-python hypotheses/H2_patient_correlation/exp01_site_clustering/run.py --encoder uni2h
-
-python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py
-python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py --encoder uni2h
-
-# Regenerate exp02 plots only (skips the ~20 min embedding scan, uses cached arrays)
-python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py --encoder conch --plots-only
-python hypotheses/H2_patient_correlation/exp02_tumour_similarity/run.py --encoder uni2h --plots-only
-
-# HPC (exp02, both encoders)
-sbatch hypotheses/H2_patient_correlation/exp02_tumour_similarity/run_h2_exp02_hpc.sh
-```
 
 ---
 

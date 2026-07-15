@@ -37,7 +37,7 @@ from histoRAG.classify import (
     cluster_summary,
     grouped_metrics,
 )
-from histoRAG.correlate import compute_umap, plot_umap, plot_umap_3d, plot_umap_3d_interactive
+from histoRAG.correlate import compute_umap, plot_umap, plot_umap_3d_interactive
 
 
 def _cluster_label_strings(cluster_ids: np.ndarray) -> np.ndarray:
@@ -54,18 +54,12 @@ def _plots(out_dir: Path, cache_dir: Path, encoder: str, tag: str) -> None:
     plot_umap(umap_2d, labels=cluster_strs,
               out_path=out_dir / "umap_by_cluster.png",
               title=f"KMeans Clusters — {encoder}")
-    plot_umap_3d(umap_3d, labels=cluster_strs,
-                 out_path=out_dir / "umap_by_cluster_3d.png",
-                 title=f"KMeans Clusters 3D — {encoder}")
     plot_umap_3d_interactive(umap_3d, labels=cluster_strs,
                              out_path=out_dir / "umap_by_cluster_3d.html",
                              title=f"KMeans Clusters 3D — {encoder}")
     plot_umap(umap_2d, labels=gt_lbls,
               out_path=out_dir / "umap_by_groundtruth.png",
               title=f"Ground-truth Labels — {encoder}")
-    plot_umap_3d(umap_3d, labels=gt_lbls,
-                 out_path=out_dir / "umap_by_groundtruth_3d.png",
-                 title=f"Ground-truth Labels 3D — {encoder}")
     plot_umap_3d_interactive(umap_3d, labels=gt_lbls,
                              out_path=out_dir / "umap_by_groundtruth_3d.html",
                              title=f"Ground-truth Labels 3D — {encoder}")
@@ -288,9 +282,8 @@ def run(
         "tissue_results":  site_df.to_dict(orient="records"),
         "wsi_results":     wsi_df.to_dict(orient="records"),
         "outputs": [
-            "umap_by_cluster.png", "umap_by_cluster_3d.png", "umap_by_cluster_3d.html",
-            "umap_by_groundtruth.png", "umap_by_groundtruth_3d.png",
-            "umap_by_groundtruth_3d.html",
+            "umap_by_cluster.png", "umap_by_cluster_3d.html",
+            "umap_by_groundtruth.png", "umap_by_groundtruth_3d.html",
         ],
         "cache": [
             "cache/kmeans_cluster_ids.npy", "cache/kmeans_true_labels.npy",

@@ -35,7 +35,6 @@ from histoRAG.labels import tumour_labels_from_geojson
 from histoRAG.correlate import (
     compute_umap,
     plot_umap,
-    plot_umap_3d,
     plot_umap_3d_interactive,
     compute_similarity_pairs,
     plot_similarity_distribution,
@@ -52,9 +51,6 @@ def _plots(tumour_dir: Path, nontumour_dir: Path, cache_dir: Path, encoder: str)
         plot_umap(umap_coords_2d, labels=umap_sites,
                   out_path=plot_dir / "umap_patches_by_site.png",
                   title=f"{label.capitalize()} Patch Embeddings ({encoder})  —  2D UMAP by site")
-        plot_umap_3d(umap_coords_3d, labels=umap_sites,
-                     out_path=plot_dir / "umap_patches_by_site_3d.png",
-                     title=f"{label.capitalize()} Patch Embeddings 3D ({encoder})")
         plot_umap_3d_interactive(umap_coords_3d, labels=umap_sites,
                                  out_path=plot_dir / "umap_patches_by_site_3d.html",
                                  title=f"{label.capitalize()} Patch Embeddings 3D ({encoder})")
@@ -115,9 +111,6 @@ def _umap_and_cache(embeddings: np.ndarray, sites: np.ndarray,
     plot_umap(coords_2d, labels=umap_sites,
               out_path=plot_dir / "umap_patches_by_site.png",
               title=f"{label.capitalize()} Patch Embeddings ({encoder_name})  —  2D UMAP by site")
-    plot_umap_3d(coords_3d, labels=umap_sites,
-                 out_path=plot_dir / "umap_patches_by_site_3d.png",
-                 title=f"{label.capitalize()} Patch Embeddings 3D ({encoder_name})")
     plot_umap_3d_interactive(coords_3d, labels=umap_sites,
                              out_path=plot_dir / "umap_patches_by_site_3d.html",
                              title=f"{label.capitalize()} Patch Embeddings 3D ({encoder_name})")
@@ -313,8 +306,8 @@ def run(
         "kde_sample_per_site":    kde_sample,
         "outputs": {
             "similarity_distribution.png": "4-curve KDE (tumour + non-tumour)",
-            "tumour":    ["umap_patches_by_site.png", "umap_patches_by_site_3d.png", "umap_patches_by_site_3d.html"],
-            "nontumour": ["umap_patches_by_site.png", "umap_patches_by_site_3d.png", "umap_patches_by_site_3d.html"],
+            "tumour":    ["umap_patches_by_site.png", "umap_patches_by_site_3d.html"],
+            "nontumour": ["umap_patches_by_site.png", "umap_patches_by_site_3d.html"],
         },
         "cache": [
             "cache/tumour_umap_coords_2d.npy",  "cache/tumour_umap_coords_3d.npy",  "cache/tumour_umap_sites.npy",

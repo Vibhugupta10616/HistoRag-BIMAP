@@ -11,13 +11,11 @@
   "outputs": {
     "tumour": [
       "umap_patches_by_site.png",
-      "umap_patches_by_site_3d.png",
       "umap_patches_by_site_3d.html",
       "similarity_distribution.png"
     ],
     "nontumour": [
       "umap_patches_by_site.png",
-      "umap_patches_by_site_3d.png",
       "umap_patches_by_site_3d.html",
       "similarity_distribution.png"
     ]

@@ -22,11 +22,12 @@ from sklearn.cluster import KMeans
 from histoRAG.loader import count_encoder_patches, iter_encoder
 from histoRAG.correlate import compute_umap, plot_umap
 
-_HERE      = Path(__file__).parent
-_CFG_EXP01 = _HERE / "exp01_kmeans_k2" / "config.yaml"
-_OUT_VIS   = _HERE / "exp01_kmeans_k2" / "outputs" / "vis"
-_N_SAMPLE  = 50_000
-_RANDOM    = 42
+_HERE          = Path(__file__).parent
+_CFG_EXP01     = _HERE / "exp01_kmeans_k2" / "config.yaml"
+_OUT_VIS_EXP01 = _HERE / "exp01_kmeans_k2" / "outputs" / "vis"  # k=2 plot
+_OUT_VIS_EXP02 = _HERE / "exp02_overcluster_assign" / "outputs" / "vis"  # k=8 plot
+_N_SAMPLE      = 50_000
+_RANDOM        = 42
 
 
 def _subsample(encoder: str, embeddings_root: str, n: int) -> np.ndarray:
@@ -60,17 +61,19 @@ def run(encoder: str) -> None:
     print("[viz] Computing 2D UMAP ...")
     coords = compute_umap(emb, n_components=2, random_state=_RANDOM)
 
-    _OUT_VIS.mkdir(parents=True, exist_ok=True)
+    _OUT_VIS_EXP01.mkdir(parents=True, exist_ok=True)
+    _OUT_VIS_EXP02.mkdir(parents=True, exist_ok=True)
 
     plot_umap(coords, labels=np.array([f"cluster_{i}" for i in labels_k2]),
-              out_path=_OUT_VIS / f"umap_kmeans_k2_{encoder}.png",
+              out_path=_OUT_VIS_EXP01 / f"umap_kmeans_k2_{encoder}.png",
               title=f"KMeans k=2 — {encoder} (n={_N_SAMPLE:,})")
 
     plot_umap(coords, labels=np.array([f"cluster_{i}" for i in labels_k8]),
-              out_path=_OUT_VIS / f"umap_kmeans_k8_{encoder}.png",
+              out_path=_OUT_VIS_EXP02 / f"umap_kmeans_k8_{encoder}.png",
               title=f"KMeans k=8 — {encoder} (n={_N_SAMPLE:,})")
 
-    print(f"[viz] Done.")
+    print(f"[viz] k=2 plot -> {_OUT_VIS_EXP01}")
+    print(f"[viz] k=8 plot -> {_OUT_VIS_EXP02}")
 
 
 if __name__ == "__main__":

@@ -1,33 +1,43 @@
 # H1 — Unsupervised Tumour Grouping + XAI
 
+## Running
+
+```bash
+# exp01  (on full dataset)
+python hypotheses/H1_tumour_classification/exp01_kmeans_k2/run.py --encoder conch
+python hypotheses/H1_tumour_classification/exp01_kmeans_k2/run.py --encoder conch --skip-kmeans  # rerun UMAP + plots
+python hypotheses/H1_tumour_classification/exp01_kmeans_k2/run.py --encoder conch --plots-only   # replot only
+
+# exp02 — three run modes each
+python hypotheses/H1_tumour_classification/exp02_overcluster_assign/run.py --encoder conch
+python hypotheses/H1_tumour_classification/exp02_overcluster_assign/run.py --encoder conch --skip-kmeans
+python hypotheses/H1_tumour_classification/exp02_overcluster_assign/run.py --encoder conch --plots-only
+
+# Quick preview only (subsample 50K), One command produces BOTH k=2 (-> exp01/outputs/vis/) and k=8 (-> exp02/outputs/vis/).
+python hypotheses/H1_tumour_classification/visualize_kmeans_umap.py --encoder conch
+
+# HPC — SLURM job: runs exp01 (k=2) AND exp02 (k=8), for ALL THREE encoders
+sbatch hypotheses/H1_tumour_classification/run_h1_exp12_hpc.sh
+
+# exp03 — HDBSCAN (same three modes; same 4-file plot set as exp01/exp02)
+python hypotheses/H1_tumour_classification/exp03_hdbscan_clustering/run.py --encoder conch                  # full run
+python hypotheses/H1_tumour_classification/exp03_hdbscan_clustering/run.py --encoder conch --skip-hdbscan   # reuse cached result, rerun UMAP + plots
+python hypotheses/H1_tumour_classification/exp03_hdbscan_clustering/run.py --encoder conch --plots-only     # reuse cached result, just replot
+sbatch hypotheses/H1_tumour_classification/exp03_hdbscan_clustering/run_h1_exp03_hpc.sh                     # HPC: full run, all encoders
+```
+
+**No quick-preview script exists for exp03, unlike `visualize_kmeans_umap.py` for exp01/exp02**
+
+---
+
 ## Hypothesis
 
 Do frozen encoder embeddings **naturally group tumour patches together** — without ever
 seeing labels?
 
-K-means clustering is applied to frozen patch embeddings with **no label information**.
+K-means clustering and Hierarchical DB clustering is applied to frozen patch embeddings with **no label information**.
 The QuPath `.geojson` annotations are used **only at evaluation time** to compare cluster
 assignments against the real tumour regions.
-
----
-
-## Method
-
-1. Load frozen patch embeddings `(N_patches, dim)`.
-2. Cluster with K-means (no labels used).
-3. Map each cluster to tumour/other by **majority vote** against `.geojson` ground truth.
-4. Compute **Accuracy, Precision, Recall** vs ground truth.
-
----
-
-## Patch labelling (ground truth, evaluation only)
-
-| Label | Definition |
-|---|---|
-| `tumour` | Patch center inside a QuPath `.geojson` polygon for that slide |
-| `other` | Patch center outside all polygons (unannotated = non-tumour) |
-
-See `histoRAG/labels.py → tumour_labels_from_geojson`.
 
 ---
 
@@ -39,13 +49,14 @@ See `histoRAG/labels.py → tumour_labels_from_geojson`.
 | `exp02_overcluster_assign` | K-means k=8 | Is tumour signal **present at all**, even if not dominant? |
 | `exp03_hdbscan_clustering` | HDBSCAN + IncrementalPCA | What is the natural cluster structure? How does it align with tumour labels? |
 
-**Interpretation matrix:**
+---
 
-| exp01 (k=2) | exp02 (k=8) | Conclusion |
-|---|---|---|
-| Pass | Pass | Tumour is the dominant signal — strong encoder |
-| Fail | Pass | Tumour signal exists but is buried — weak encoder |
-| Fail | Fail | Encoder does not encode tumour-discriminative features |
+## Exp1 & 2  — KMeans
+
+1. Load frozen patch embeddings `(N_patches, dim)`.
+2. Cluster with K-means (no labels used).
+3. Map each cluster to tumour/other by **majority vote** against `.geojson` ground truth.
+4. Compute **Accuracy, Precision, Recall** vs ground truth.
 
 Why k=8 helps: if stain colour or tissue type dominates the top split, k=2 fails. With
 k=8, tumour patches can still form their own sub-cluster *inside* one of those larger
@@ -58,7 +69,6 @@ groups, giving tumour a chance to be recovered even in a weaker encoder.
 **Dataset**: 8.21M patches (CLIP/CONCH) · 2.07M patches (UNI) across 4 tissue sites.
 **Tumour prevalence**: ~5% — baseline precision if a model labels everything as tumour.
 
-### Overall metrics
 
 | Encoder | Exp | Precision | vs baseline | Recall | F1 | Verdict |
 |---|---|---|---|---|---|---|
@@ -68,15 +78,6 @@ groups, giving tumour a chance to be recovered even in a weaker encoder.
 | CLIP | k=8 | 0.090 | 1.75× | 0.804 | 0.162 | ⚠️ weak |
 | CONCH | k=8 | 0.127 | 2.5× | 0.801 | 0.220 | ✅ present |
 | **UNI** | **k=8** | **0.154** | **3.1×** | **0.818** | **0.259** | ✅ **best** |
-
-### Per-tissue breakdown (k=8 precision)
-
-| Tissue | CLIP | CONCH | UNI |
-|---|---|---|---|
-| Hypopharynx | 0.089 | 0.117 | **0.141** |
-| Larynx | 0.075 | 0.103 | **0.129** |
-| Oral Cavity | 0.095 | 0.130 | **0.165** |
-| Oropharynx | 0.093 | 0.136 | **0.160** |
 
 UNI is the strongest encoder across every tissue site.
 
@@ -97,7 +98,7 @@ This matches the `exp01 fail, exp02 pass` pattern = *tumour signal present but b
 
 ---
 
-## Exp03 — HDBSCAN Results
+## Exp03 — HDBSCAN
 
 **Setup:** 20-component IncrementalPCA → HDBSCAN (min\_cluster\_size=500) on 480K patches
 (120K per site cap). ARI/NMI measure alignment with tumour ground truth.
@@ -151,7 +152,8 @@ Implemented in `histoRAG/classify.py → explain_dimensions`.
 3. Per dimension: `effect_size = |centroid_tumour - centroid_other| / pooled_std`
 4. Rank dimensions by effect size (Cohen's d) — higher = more tumour-discriminative
 
-XAI requires all embeddings in memory simultaneously, so it is not computed in the two-pass streaming pipeline used by exp01/exp02. The results below were produced from a one-shot full-load run on HPC. Output is saved under `summary.json → xai` with keys `top_dims`, `effect_sizes`, `tumour_centroid`, `other_centroid`.
+XAI requires all embeddings in memory simultaneously, so it is not computed in the
+two-pass streaming pipeline used by exp01/exp02. 
 
 ### XAI Results (full dataset, HPC)
 
@@ -179,6 +181,8 @@ more across the larger 1024-dim space. UNI achieves the best clustering F1 (0.25
 because one axis is sharpest, but because multiple sub-clusters collectively capture the
 buried tumour signal at k=8.
 
+**These results are produced on a full run only**
+
 ### Practical implication for HistoRAG
 
 | Use case | Best choice |
@@ -189,16 +193,6 @@ buried tumour signal at k=8.
 
 ---
 
-## Metrics
-
-- **Precision** — of all patches predicted as tumour, how many are truly tumour
-- **Recall** — of all true tumour patches, how many were grouped correctly
-- **F1** — harmonic mean of precision and recall
-- **Note**: metrics use post-hoc cluster alignment — same labels for assignment and
-  evaluation. This is standard for unsupervised clustering analysis but is not
-  independent validation.
-
----
 
 ## Shared modules
 
@@ -213,41 +207,6 @@ Each experiment has its own self-contained `run.py`:
 - `exp01_kmeans_k2/run.py` — two-pass KMeans k=2 pipeline
 - `exp02_overcluster_assign/run.py` — two-pass KMeans k=8 pipeline
 - `exp03_hdbscan_clustering/run.py` — PCA + HDBSCAN pipeline
-
-**Output structure** (per encoder):
-```
-outputs/{encoder}/
-  summary_{encoder}.json
-  cache/   kmeans_cluster_ids.npy  kmeans_true_labels.npy  kmeans_predicted.npy
-           manifest.parquet  umap_emb.npy  umap_coords_2d.npy  umap_coords_3d.npy
-           viz_cluster_labels.npy  viz_gt_labels.npy
-  vis/     umap_by_cluster.png  umap_by_cluster_3d.png  umap_by_cluster_3d.html
-           umap_by_groundtruth.png  umap_by_groundtruth_3d.png  umap_by_groundtruth_3d.html
-```
-
----
-
-## Running
-
-```bash
-# exp01 / exp02 — three run modes each
-python hypotheses/H1_tumour_classification/exp01_kmeans_k2/run.py --encoder conch
-python hypotheses/H1_tumour_classification/exp01_kmeans_k2/run.py --encoder conch --skip-kmeans  # rerun UMAP + plots
-python hypotheses/H1_tumour_classification/exp01_kmeans_k2/run.py --encoder conch --plots-only   # replot only
-
-python hypotheses/H1_tumour_classification/exp02_overcluster_assign/run.py --encoder conch
-python hypotheses/H1_tumour_classification/exp02_overcluster_assign/run.py --encoder conch --skip-kmeans
-python hypotheses/H1_tumour_classification/exp02_overcluster_assign/run.py --encoder conch --plots-only
-
-# HPC — all encoders, exp01 + exp02 in one job
-sbatch hypotheses/H1_tumour_classification/run_h1_exp12_hpc.sh
-
-# exp03 — HDBSCAN (same three modes)
-python hypotheses/H1_tumour_classification/exp03_hdbscan_clustering/run.py --encoder conch
-python hypotheses/H1_tumour_classification/exp03_hdbscan_clustering/run.py --encoder conch --skip-hdbscan
-python hypotheses/H1_tumour_classification/exp03_hdbscan_clustering/run.py --encoder conch --plots-only
-sbatch hypotheses/H1_tumour_classification/exp03_hdbscan_clustering/run_h1_exp03_hpc.sh
-```
 
 ---
 

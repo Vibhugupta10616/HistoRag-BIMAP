@@ -11,7 +11,7 @@ Provides:
   - classification_metrics:    Accuracy, Precision, Recall, F1 (vs ground truth)
   - cluster_summary:           per-cluster GeoJSON tumour percentage + assigned label
   - grouped_metrics:           per-site or per-WSI post-hoc evaluation
-  - explain_dimensions:        STUB — XAI strategy deferred until clustering results available
+  - explain_dimensions:        XAI — Cohen's d dimension importance (run via H1's xai/run_xai.py)
   - tune_threshold:            H3 — pick a decision threshold on validation scores
   - probe_metrics:             H3 — AUROC/PR-AUC + thresholded metrics for a supervised probe
 """
@@ -325,7 +325,7 @@ def probe_metrics(y_true: np.ndarray, y_score: np.ndarray, threshold: float) -> 
 
 
 # ---------------------------------------------------------------------------
-# XAI — STUB (deferred until clustering results are available)
+# XAI — Cohen's d dimension importance
 # ---------------------------------------------------------------------------
 
 def explain_dimensions(

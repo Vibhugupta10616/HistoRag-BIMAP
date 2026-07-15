@@ -50,15 +50,21 @@ geojson → tumour/other label derivation).
 ## Running
 
 ```bash
-# Smoke test — one site, fast
+# Smoke test — restricts the patient split + train/val/test to ONE anatomical site
+# (~1/4 the patches), otherwise identical pipeline. Not a subsample/preview like H1's
+# visualize_kmeans_umap.py — it's a real, smaller, still-valid fit + evaluation.
 python hypotheses/H3_supervised_probe/exp01_linear_probe/run.py --encoder uni2h --sites larynx
 
-# Full run, one encoder
+# Full run, one encoder — all sites, all patients (700), the numbers in this README
 python hypotheses/H3_supervised_probe/exp01_linear_probe/run.py --encoder uni2h
 
-# All three encoders
+# All three encoders, full run each
 pwsh hypotheses/H3_supervised_probe/run_h3_all_encoders.ps1
 ```
+
+No `--plots-only`/`--skip-*` cache-replay flags exist here (unlike H1) — there's no
+expensive clustering step to skip re-running; the linear probe itself is the cheap part,
+so every run just redoes the whole thing.
 
 ## Output structure (per encoder)
 

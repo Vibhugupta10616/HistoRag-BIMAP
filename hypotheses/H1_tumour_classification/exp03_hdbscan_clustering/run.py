@@ -41,7 +41,6 @@ from histoRAG.loader import detect_patch_size, iter_encoder
 from histoRAG.correlate import (
     compute_umap,
     plot_umap,
-    plot_umap_3d,
     plot_umap_3d_interactive,
 )
 
@@ -105,7 +104,7 @@ def _compute_metrics(cluster_labels: np.ndarray, gt_labels: np.ndarray) -> dict:
 
 
 def _plots(out_dir: Path, cache_dir: Path, encoder: str) -> None:
-    """Regenerate all six plots from cached UMAP arrays."""
+    """Regenerate all four plots from cached UMAP arrays."""
     umap_2d      = np.load(cache_dir / "umap_coords_2d.npy")
     umap_3d      = np.load(cache_dir / "umap_coords_3d.npy")
     cluster_lbls = np.load(cache_dir / "viz_cluster_labels.npy", allow_pickle=True)
@@ -116,9 +115,6 @@ def _plots(out_dir: Path, cache_dir: Path, encoder: str) -> None:
     plot_umap(umap_2d, labels=cluster_strs,
               out_path=out_dir / "umap_by_cluster.png",
               title=f"HDBSCAN Clusters — {encoder}")
-    plot_umap_3d(umap_3d, labels=cluster_strs,
-                 out_path=out_dir / "umap_by_cluster_3d.png",
-                 title=f"HDBSCAN Clusters 3D — {encoder}")
     plot_umap_3d_interactive(umap_3d, labels=cluster_strs,
                              out_path=out_dir / "umap_by_cluster_3d.html",
                              title=f"HDBSCAN Clusters 3D — {encoder}")
@@ -126,9 +122,6 @@ def _plots(out_dir: Path, cache_dir: Path, encoder: str) -> None:
     plot_umap(umap_2d, labels=gt_lbls,
               out_path=out_dir / "umap_by_groundtruth.png",
               title=f"Ground-truth Tumour Labels — {encoder}")
-    plot_umap_3d(umap_3d, labels=gt_lbls,
-                 out_path=out_dir / "umap_by_groundtruth_3d.png",
-                 title=f"Ground-truth Tumour Labels 3D — {encoder}")
     plot_umap_3d_interactive(umap_3d, labels=gt_lbls,
                              out_path=out_dir / "umap_by_groundtruth_3d.html",
                              title=f"Ground-truth Tumour Labels 3D — {encoder}")
@@ -329,8 +322,8 @@ def run(
         "min_cluster_size":       min_cls_size,
         "metrics":                metrics,
         "outputs": [
-            "umap_by_cluster.png", "umap_by_cluster_3d.png", "umap_by_cluster_3d.html",
-            "umap_by_groundtruth.png", "umap_by_groundtruth_3d.png", "umap_by_groundtruth_3d.html",
+            "umap_by_cluster.png", "umap_by_cluster_3d.html",
+            "umap_by_groundtruth.png", "umap_by_groundtruth_3d.html",
         ],
         "cache": [
             "cache/hdbscan_pca.npy", "cache/hdbscan_cluster_labels.npy",
