@@ -1,7 +1,5 @@
 # HistoRAG — Retrieval-Augmented Histopathology Atlas
 
-**FAU BIMAP SS2026 · Individual project · Vibhu Gupta**
-
 This project investigates whether patch-level image embeddings from whole slide images
 (WSIs), produced by **frozen** encoders, carry clinically meaningful structure: whether
 tumour tissue groups on its own without labels, and how patients relate to each other at
