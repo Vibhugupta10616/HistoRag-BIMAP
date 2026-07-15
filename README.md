@@ -23,16 +23,15 @@ regression) on top of the same frozen embeddings.
 
 | Component | What it does |
 |---|---|
-| **H1** — `hypotheses/H1_tumour_classification/` | Does tumour tissue cluster on its own? K-means (k=2, k=8), HDBSCAN, + XAI dimension importance |
-| **H2** — `hypotheses/H2_patient_correlation/` | How do patients relate? Site clustering (Q1) + cross-site tumour similarity (Q2) |
-| **H3** — `hypotheses/H3_supervised_probe/` | Is tumour linearly separable with supervision? Logistic regression probe on frozen embeddings |
-| **Hackday2** — `Hackday2/` | Self-contained single-WSI demo: patch → CONCH → HDBSCAN → 2 UMAP plots |
+| **H1** - `hypotheses/H1_tumour_classification/` | Does tumour tissue cluster on its own? K-means (k=2, k=8), HDBSCAN, + XAI dimension importance |
+| **H2** - `hypotheses/H2_patient_correlation/` | How do patients relate? Site clustering (Q1) + cross-site tumour similarity (Q2) |
+| **H3** - `hypotheses/H3_supervised_probe/` | Is tumour linearly separable with supervision? Logistic regression probe on frozen embeddings |
+| **Hackday2** - `Hackday2/` | Self-contained single-WSI demo: patch → CONCH → HDBSCAN → 2 UMAP plots |
 | **`histoRAG/`** | Shared library used by all experiments |
-| **`Summary.md`** | Cross-experiment interpretation + the retrieval design the results justify |
 
-The headline conclusion (see `Summary.md`): tumour is **not** the dominant axis of
-variation in any encoder, but tumour signal is present and buried, and **tumour patches
-are broadly site-agnostic** — which is the signal a patient-level RAG should be built on.
+The headline conclusion: tumour is **not** the dominant axis of variation in any
+encoder, but tumour signal is present and buried, and **tumour patches are broadly
+site-agnostic** — which is the signal a patient-level RAG should be built on.
 
 ---
 
@@ -107,7 +106,6 @@ HistoRag-BIMAP/
 │   └── H3_supervised_probe/
 │       └── exp01_linear_probe/          # logistic regression on frozen embeddings
 ├── Hackday2/                    # single-WSI HDBSCAN demo (self-contained)
-├── Summary.md                  # cross-experiment interpretation + retrieval design
 ├── requirements.txt            # local
 └── requirements_hpc.txt        # TinyGPU / HPC
 ```
