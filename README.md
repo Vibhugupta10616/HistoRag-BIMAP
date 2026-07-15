@@ -108,8 +108,7 @@ HistoRag-BIMAP/
 └── requirements_hpc.txt        # TinyGPU / HPC
 ```
 
-Each experiment folder is self-contained: `config.yaml` + `run.py` + `outputs/`.
-WSIs, patches, embeddings, and index artifacts are gitignored.
+Each experiment folder is self-contained: `config.yaml` + `run.py` + `outputs/` + `summary_*.json` (logs)
 
 ---
 
