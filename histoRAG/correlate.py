@@ -351,6 +351,8 @@ def plot_similarity_distribution(
     title: str = "Patch Similarity Distribution",
     within_nt: np.ndarray | None = None,
     cross_nt: np.ndarray | None = None,
+    class_label: str = "Tumour",
+    color: str = "#e53935",
 ) -> None:
     """
     KDE distribution of within-site vs cross-site cosine similarities.
@@ -372,8 +374,8 @@ def plot_similarity_distribution(
     bin_centers = (bins[:-1] + bins[1:]) / 2
 
     series = [
-        (within_t, "#e53935", "-",  "Tumour – within-site"),
-        (cross_t,  "#e53935", "--", "Tumour – cross-site"),
+        (within_t, color, "-",  f"{class_label} – within-site"),
+        (cross_t,  color, "--", f"{class_label} – cross-site"),
     ]
     if four_curve:
         series += [
@@ -394,7 +396,7 @@ def plot_similarity_distribution(
         ax.axvline(mode, color=color, linestyle=ls, linewidth=1.0, alpha=0.6)
 
     gap_t = computed_modes[0] - computed_modes[1]
-    annotation = f"Tumour gap = {gap_t:+.4f}"
+    annotation = f"{class_label} gap = {gap_t:+.4f}"
     if four_curve:
         annotation += f"\nNon-tumour gap = {computed_modes[2] - computed_modes[3]:+.4f}"
     ax.annotate(
